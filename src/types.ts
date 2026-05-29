@@ -26,6 +26,12 @@ export interface TodayResponse {
   lastFetch: ReserveReading | null;
 }
 
+export interface DatesResponse {
+  month: string;
+  timezone: "Asia/Taipei";
+  dates: string[];
+}
+
 export interface LatestResponse {
   latest: ReserveReading | null;
   lastFetch: ReserveReading | null;

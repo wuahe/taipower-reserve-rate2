@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Pool } from "pg";
-import { taipeiDayRange } from "./time.js";
+import { taipeiDateKey, taipeiDayRange } from "./time.js";
 import type { ReserveReading } from "./types.js";
 
 export interface ReadingStore {
@@ -11,6 +11,7 @@ export interface ReadingStore {
   latestSuccess(): Promise<ReserveReading | null>;
   lastFetch(): Promise<ReserveReading | null>;
   today(date?: Date): Promise<ReserveReading[]>;
+  datesWithData(month: Date): Promise<string[]>;
 }
 
 export class FileStore implements ReadingStore {
@@ -58,6 +59,20 @@ export class FileStore implements ReadingStore {
       const observedAt = new Date(item.observedAt);
       return observedAt >= start && observedAt < end;
     });
+  }
+
+  async datesWithData(month: Date): Promise<string[]> {
+    const { start, end } = taipeiMonthRange(month);
+    const readings = await this.readAll();
+    const dates = new Set<string>();
+    for (const item of readings) {
+      if (item.status !== "ok" || typeof item.reserveRate !== "number") continue;
+      const observedAt = new Date(item.observedAt);
+      if (observedAt >= start && observedAt < end) {
+        dates.add(taipeiDateKey(observedAt));
+      }
+    }
+    return [...dates].sort();
   }
 
   private async readAll(): Promise<ReserveReading[]> {
@@ -153,6 +168,23 @@ export class PostgresStore implements ReadingStore {
     );
     return result.rows.map(rowToReading);
   }
+
+  async datesWithData(month: Date): Promise<string[]> {
+    const { start, end } = taipeiMonthRange(month);
+    const result = await this.pool.query(
+      `
+        SELECT DISTINCT to_char(observed_at AT TIME ZONE 'Asia/Taipei', 'YYYY-MM-DD') AS date
+        FROM reserve_readings
+        WHERE observed_at >= $1
+          AND observed_at < $2
+          AND status = 'ok'
+          AND reserve_rate IS NOT NULL
+        ORDER BY date ASC;
+      `,
+      [start.toISOString(), end.toISOString()]
+    );
+    return result.rows.map((row) => String(row.date));
+  }
 }
 
 export function createStore(
@@ -185,4 +217,14 @@ function rowToReading(row: Record<string, unknown>): ReserveReading {
     raw: row.raw ?? null,
     createdAt: new Date(row.created_at as string).toISOString()
   };
+}
+
+function taipeiMonthRange(date: Date): { start: Date; end: Date } {
+  const key = taipeiDateKey(date);
+  const [year, month] = key.split("-").map(Number);
+  const start = taipeiDayRange(new Date(`${year}-${String(month).padStart(2, "0")}-01T12:00:00+08:00`)).start;
+  const endMonth = month === 12 ? 1 : month + 1;
+  const endYear = month === 12 ? year + 1 : year;
+  const end = taipeiDayRange(new Date(`${endYear}-${String(endMonth).padStart(2, "0")}-01T12:00:00+08:00`)).start;
+  return { start, end };
 }

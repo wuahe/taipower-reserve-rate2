@@ -7,7 +7,7 @@ import { Collector } from "./scheduler.js";
 import { createStore, type ReadingStore } from "./store.js";
 import { normalizeReadingInstantReserve } from "./taipower.js";
 import { taipeiDayRange } from "./time.js";
-import type { LatestResponse, ReserveReading, ReserveSummary, StatusResponse, TodayResponse } from "./types.js";
+import type { DatesResponse, LatestResponse, ReserveReading, ReserveSummary, StatusResponse, TodayResponse } from "./types.js";
 
 const projectRoot = process.cwd();
 const publicDir = path.join(projectRoot, "public");
@@ -55,6 +55,22 @@ const server = http.createServer(async (request, response) => {
         points,
         summary: summarize(points),
         lastFetch: normalizeReadingInstantReserve(await store.lastFetch())
+      };
+      sendJson(response, 200, body);
+      return;
+    }
+
+    if (url.pathname === "/api/dates") {
+      const targetMonth = parseMonthQuery(url.searchParams.get("month"));
+      if (!targetMonth) {
+        sendJson(response, 400, { error: "Invalid month. Use YYYY-MM." });
+        return;
+      }
+
+      const body: DatesResponse = {
+        month: url.searchParams.get("month") ?? "",
+        timezone: "Asia/Taipei",
+        dates: await store.datesWithData(targetMonth)
       };
       sendJson(response, 200, body);
       return;
@@ -156,6 +172,14 @@ function parseDateQuery(value: string | null): Date | null {
   if (!match) return null;
   const [, year, month, day] = match;
   return new Date(`${year}-${month}-${day}T12:00:00+08:00`);
+}
+
+function parseMonthQuery(value: string | null): Date | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month] = match;
+  return new Date(`${year}-${month}-01T12:00:00+08:00`);
 }
 
 async function serveStatic(pathname: string, response: http.ServerResponse): Promise<void> {

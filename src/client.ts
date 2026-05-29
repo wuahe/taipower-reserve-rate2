@@ -22,6 +22,12 @@ interface TodayResponse {
   lastFetch: ReserveReading | null;
 }
 
+interface DatesResponse {
+  month: string;
+  timezone: "Asia/Taipei";
+  dates: string[];
+}
+
 interface ChartPoint {
   observedAt: string;
   reserveRate: number;
@@ -61,7 +67,13 @@ const els = {
   statusPill: document.querySelector<HTMLElement>("#status-pill"),
   status: document.querySelector<HTMLElement>("#fetch-status"),
   empty: document.querySelector<HTMLElement>("#empty-state"),
-  datePicker: document.querySelector<HTMLInputElement>("#date-picker"),
+  dateControl: document.querySelector<HTMLElement>("#date-control"),
+  dateButton: document.querySelector<HTMLButtonElement>("#date-button"),
+  calendarPopover: document.querySelector<HTMLElement>("#calendar-popover"),
+  calendarTitle: document.querySelector<HTMLElement>("#calendar-title"),
+  calendarPrev: document.querySelector<HTMLButtonElement>("#calendar-prev"),
+  calendarNext: document.querySelector<HTMLButtonElement>("#calendar-next"),
+  calendarGrid: document.querySelector<HTMLElement>("#calendar-grid"),
   refresh: document.querySelector<HTMLButtonElement>("#refresh-now")
 };
 
@@ -69,18 +81,40 @@ const chartState: {
   points: ChartPoint[];
   hoverIndex: number | null;
   lastFetchStatus: "ok" | "error" | "neutral";
+  selectedDate: string;
+  calendarMonth: string;
+  availableDates: Set<string>;
 } = {
   points: [],
   hoverIndex: null,
-  lastFetchStatus: "neutral"
+  lastFetchStatus: "neutral",
+  selectedDate: taipeiDateKey(new Date()),
+  calendarMonth: taipeiDateKey(new Date()).slice(0, 7),
+  availableDates: new Set()
 };
 
 els.refresh?.addEventListener("click", () => {
   void loadAndRender();
 });
 
-els.datePicker?.addEventListener("change", () => {
-  void loadAndRender();
+els.dateButton?.addEventListener("click", () => {
+  void toggleCalendar();
+});
+
+els.calendarPrev?.addEventListener("click", () => {
+  chartState.calendarMonth = shiftMonth(chartState.calendarMonth, -1);
+  void renderCalendar();
+});
+
+els.calendarNext?.addEventListener("click", () => {
+  chartState.calendarMonth = shiftMonth(chartState.calendarMonth, 1);
+  void renderCalendar();
+});
+
+document.addEventListener("click", (event) => {
+  if (!els.dateControl || !els.calendarPopover || !els.dateButton) return;
+  if (event.target instanceof Node && els.dateControl.contains(event.target)) return;
+  closeCalendar();
 });
 
 window.addEventListener("resize", () => {
@@ -101,19 +135,20 @@ els.canvas?.addEventListener("mouseleave", () => {
   drawChart();
 });
 
-if (els.datePicker) els.datePicker.value = taipeiDateKey(new Date());
+updateDateButton();
 void loadAndRender();
+void renderCalendar();
 setInterval(() => {
-  if (!els.datePicker || els.datePicker.value === taipeiDateKey(new Date())) {
+  if (chartState.selectedDate === taipeiDateKey(new Date())) {
     void loadAndRender(false);
+    void renderCalendar();
   }
 }, 60 * 1000);
 
 async function loadAndRender(showLoading = true): Promise<void> {
   if (showLoading) setStatus("讀取中", "neutral");
   try {
-    const selectedDate = els.datePicker?.value || taipeiDateKey(new Date());
-    const response = await fetch(`/api/today?date=${encodeURIComponent(selectedDate)}`, { cache: "no-store" });
+    const response = await fetch(`/api/today?date=${encodeURIComponent(chartState.selectedDate)}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = (await response.json()) as TodayResponse;
     const points = normalizePoints(data.points);
@@ -124,6 +159,87 @@ async function loadAndRender(showLoading = true): Promise<void> {
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), "error");
   }
+}
+
+async function loadAvailableDates(month: string): Promise<Set<string>> {
+  const response = await fetch(`/api/dates?month=${encodeURIComponent(month)}`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = (await response.json()) as DatesResponse;
+  return new Set(data.dates);
+}
+
+async function renderCalendar(): Promise<void> {
+  if (!els.calendarGrid || !els.calendarTitle) return;
+  try {
+    chartState.availableDates = await loadAvailableDates(chartState.calendarMonth);
+  } catch {
+    chartState.availableDates = new Set([chartState.selectedDate]);
+  }
+
+  const [year, month] = chartState.calendarMonth.split("-").map(Number);
+  const firstDay = new Date(year, month - 1, 1);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const leading = firstDay.getDay();
+  els.calendarTitle.textContent = `${year} 年 ${String(month).padStart(2, "0")} 月`;
+  els.calendarGrid.innerHTML = "";
+
+  for (let i = 0; i < leading; i += 1) {
+    const filler = document.createElement("span");
+    filler.className = "calendar-day outside";
+    els.calendarGrid.append(filler);
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const hasData = chartState.availableDates.has(date);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "calendar-day";
+    button.textContent = String(day);
+    button.disabled = !hasData;
+    button.dataset.hasData = hasData ? "true" : "false";
+    if (hasData && date === chartState.selectedDate) button.dataset.selected = "true";
+    if (date === taipeiDateKey(new Date())) button.dataset.today = "true";
+    button.addEventListener("click", () => {
+      if (!hasData) return;
+      chartState.selectedDate = date;
+      chartState.calendarMonth = date.slice(0, 7);
+      updateDateButton();
+      closeCalendar();
+      void loadAndRender();
+    });
+    els.calendarGrid.append(button);
+  }
+}
+
+function toggleCalendar(): void {
+  if (!els.calendarPopover || !els.dateButton) return;
+  const isOpen = !els.calendarPopover.hidden;
+  if (isOpen) {
+    closeCalendar();
+    return;
+  }
+  chartState.calendarMonth = chartState.selectedDate.slice(0, 7);
+  els.calendarPopover.hidden = false;
+  els.dateButton.setAttribute("aria-expanded", "true");
+  void renderCalendar();
+}
+
+function closeCalendar(): void {
+  if (els.calendarPopover) els.calendarPopover.hidden = true;
+  els.dateButton?.setAttribute("aria-expanded", "false");
+}
+
+function updateDateButton(): void {
+  if (els.dateButton) {
+    els.dateButton.textContent = chartState.selectedDate.replaceAll("-", "/");
+  }
+}
+
+function shiftMonth(monthKey: string, offset: number): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  const shifted = new Date(year, month - 1 + offset, 1);
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function normalizePoints(points: ReserveReading[]): ChartPoint[] {
@@ -391,7 +507,7 @@ function drawAxes(
 
   ctx.fillStyle = "#c5d9ef";
   ctx.font = "600 14px 'SF Pro Display', 'Noto Sans TC', sans-serif";
-  ctx.fillText("備轉率 ％", padding.left - 6, padding.top - 12);
+  ctx.fillText("餘裕率 ％", padding.left - 6, padding.top - 12);
   ctx.fillText("MW", width - padding.right + 8, padding.top - 12);
 }
 
