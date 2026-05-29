@@ -4,7 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { Collector } from "./scheduler.js";
-import { createStore } from "./store.js";
+import { createStore, type ReadingStore } from "./store.js";
 import { taipeiDayRange } from "./time.js";
 import type { LatestResponse, ReserveReading, ReserveSummary, TodayResponse } from "./types.js";
 
@@ -12,8 +12,7 @@ const projectRoot = process.cwd();
 const publicDir = path.join(projectRoot, "public");
 
 const config = loadConfig();
-const store = createStore(config.databaseUrl, config.dataFile, config.databaseSsl);
-await initStoreWithRetry();
+const store = await createReadyStore();
 
 const collector = new Collector(config, store);
 collector.start();
@@ -135,13 +134,28 @@ function contentType(filePath: string): string {
   return "application/octet-stream";
 }
 
-async function initStoreWithRetry(): Promise<void> {
+async function createReadyStore(): Promise<ReadingStore> {
+  const primary = createStore(config.databaseUrl, config.dataFile, config.databaseSsl);
+  try {
+    await initStoreWithRetry(primary);
+    return primary;
+  } catch (error) {
+    if (!config.databaseUrl) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[store] PostgreSQL unavailable after retries, falling back to file storage: ${message}`);
+    const fallback = createStore(null, config.dataFile);
+    await fallback.init();
+    return fallback;
+  }
+}
+
+async function initStoreWithRetry(targetStore: ReadingStore): Promise<void> {
   const maxAttempts = config.databaseUrl ? 30 : 1;
   let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      await store.init();
+      await targetStore.init();
       return;
     } catch (error) {
       lastError = error;
