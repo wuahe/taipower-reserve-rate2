@@ -57,6 +57,28 @@ test("loadConfig builds Zeabur component connection before DATABASE_URL or gener
   );
 });
 
+test("loadConfig prefers current POSTGRES variables over stale POSTGRESQL variables", () => {
+  withDatabaseEnv(
+    {
+      POSTGRESQL_HOST: "service-old",
+      POSTGRESQL_PORT: "5432",
+      POSTGRES_HOST: "service-current",
+      POSTGRES_PORT: "5432",
+      POSTGRES_USERNAME: "root",
+      POSTGRES_PASSWORD: "secret",
+      POSTGRES_DATABASE: "zeabur"
+    },
+    () => {
+      const config = loadConfig();
+      assert.equal(config.databaseUrl, "postgresql://root:secret@service-current:5432/zeabur");
+      assert.equal(
+        config.databaseConnectionSource,
+        "POSTGRES_HOST+POSTGRES_USERNAME+POSTGRES_PASSWORD+POSTGRES_DATABASE"
+      );
+    }
+  );
+});
+
 test("loadConfig falls back to generated PostgreSQL URI", () => {
   withDatabaseEnv(
     {

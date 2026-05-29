@@ -49,14 +49,14 @@ function firstNamedEnv(...names: string[]): { name: string; value: string } | nu
 }
 
 function buildPostgresUrlFromParts(): { source: string; url: string } | null {
-  const host = firstNamedEnv("POSTGRESQL_HOST", "POSTGRES_HOST");
-  const username = firstNamedEnv("POSTGRESQL_USERNAME", "POSTGRES_USERNAME", "POSTGRES_USER", "PGUSER");
-  const password = firstNamedEnv("POSTGRESQL_PASSWORD", "POSTGRES_PASSWORD", "PGPASSWORD");
-  const database = firstNamedEnv("POSTGRESQL_DATABASE", "POSTGRES_DATABASE", "POSTGRES_DB", "PGDATABASE");
+  const host = firstNamedEnv("POSTGRES_HOST", "POSTGRESQL_HOST");
+  const username = firstNamedEnv("POSTGRES_USERNAME", "POSTGRESQL_USERNAME", "POSTGRES_USER", "PGUSER");
+  const password = firstNamedEnv("POSTGRES_PASSWORD", "POSTGRESQL_PASSWORD", "PGPASSWORD");
+  const database = firstNamedEnv("POSTGRES_DATABASE", "POSTGRESQL_DATABASE", "POSTGRES_DB", "PGDATABASE");
 
   if (!host || !username || !password || !database) return null;
 
-  const port = firstEnv("POSTGRESQL_PORT", "POSTGRES_PORT", "PGPORT") ?? "5432";
+  const port = firstEnv("POSTGRES_PORT", "POSTGRESQL_PORT", "PGPORT") ?? "5432";
   const url = `postgresql://${encodeURIComponent(username.value)}:${encodeURIComponent(password.value)}@${host.value}:${port}/${encodeURIComponent(database.value)}`;
   return {
     source: `${host.name}+${username.name}+${password.name}+${database.name}`,
