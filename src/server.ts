@@ -13,7 +13,7 @@ const publicDir = path.join(projectRoot, "public");
 
 const config = loadConfig();
 const store = createStore(config.databaseUrl, config.dataFile, config.databaseSsl);
-await store.init();
+await initStoreWithRetry();
 
 const collector = new Collector(config, store);
 collector.start();
@@ -133,4 +133,29 @@ function contentType(filePath: string): string {
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
   if (filePath.endsWith(".svg")) return "image/svg+xml";
   return "application/octet-stream";
+}
+
+async function initStoreWithRetry(): Promise<void> {
+  const maxAttempts = config.databaseUrl ? 30 : 1;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await store.init();
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[store] init failed ${attempt}/${maxAttempts}: ${message}`);
+      if (attempt < maxAttempts) {
+        await delay(2000);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
