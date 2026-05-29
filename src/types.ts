@@ -40,6 +40,7 @@ export interface StatusResponse {
     type: "postgres" | "file";
     persistent: boolean;
     databaseConfigured: boolean;
+    databaseConnectionSource: string | null;
     fallbackReason: string | null;
   };
   collection: {

@@ -63,6 +63,7 @@ const server = http.createServer(async (request, response) => {
           type: store.kind,
           persistent: store.kind === "postgres",
           databaseConfigured: Boolean(config.databaseUrl),
+          databaseConnectionSource: config.databaseConnectionSource,
           fallbackReason: storeState.fallbackReason
         },
         collection: {

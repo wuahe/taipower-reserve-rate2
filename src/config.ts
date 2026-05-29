@@ -2,6 +2,7 @@ export interface AppConfig {
   port: number;
   collectIntervalMs: number;
   databaseUrl: string | null;
+  databaseConnectionSource: string | null;
   databaseSsl: boolean;
   databaseConnectTimeoutMs: number;
   databaseInitMaxAttempts: number;
@@ -36,20 +37,60 @@ function listFromEnv(name: string, fallback: string[]): string[] {
 }
 
 function firstEnv(...names: string[]): string | null {
+  return firstNamedEnv(...names)?.value ?? null;
+}
+
+function firstNamedEnv(...names: string[]): { name: string; value: string } | null {
   for (const name of names) {
     const value = process.env[name]?.trim();
-    if (value) return value;
+    if (value) return { name, value };
   }
   return null;
 }
 
+function buildPostgresUrlFromParts(): { source: string; url: string } | null {
+  const host = firstNamedEnv("POSTGRESQL_HOST", "POSTGRES_HOST");
+  const username = firstNamedEnv("POSTGRESQL_USERNAME", "POSTGRES_USERNAME", "POSTGRES_USER", "PGUSER");
+  const password = firstNamedEnv("POSTGRESQL_PASSWORD", "POSTGRES_PASSWORD", "PGPASSWORD");
+  const database = firstNamedEnv("POSTGRESQL_DATABASE", "POSTGRES_DATABASE", "POSTGRES_DB", "PGDATABASE");
+
+  if (!host || !username || !password || !database) return null;
+
+  const port = firstEnv("POSTGRESQL_PORT", "POSTGRES_PORT", "PGPORT") ?? "5432";
+  const url = `postgresql://${encodeURIComponent(username.value)}:${encodeURIComponent(password.value)}@${host.value}:${port}/${encodeURIComponent(database.value)}`;
+  return {
+    source: `${host.name}+${username.name}+${password.name}+${database.name}`,
+    url
+  };
+}
+
+function resolveDatabaseUrl(): { source: string | null; url: string | null } {
+  const explicitUrl = firstNamedEnv("DATABASE_URL");
+  if (explicitUrl) {
+    return { source: explicitUrl.name, url: explicitUrl.value };
+  }
+
+  const componentUrl = buildPostgresUrlFromParts();
+  if (componentUrl) {
+    return componentUrl;
+  }
+
+  const generatedUrl = firstNamedEnv("POSTGRES_URI", "POSTGRES_CONNECTION_STRING");
+  return {
+    source: generatedUrl?.name ?? null,
+    url: generatedUrl?.value ?? null
+  };
+}
+
 export function loadConfig(): AppConfig {
-  const databaseUrl = firstEnv("DATABASE_URL", "POSTGRES_URI", "POSTGRES_CONNECTION_STRING");
+  const database = resolveDatabaseUrl();
+  const databaseUrl = database.url;
   const databaseInitMaxAttempts = numberFromEnv("DATABASE_INIT_MAX_ATTEMPTS", databaseUrl ? 3 : 1);
   return {
     port: numberFromEnv("PORT", 3000),
     collectIntervalMs: numberFromEnv("COLLECT_INTERVAL_MS", 10 * 60 * 1000),
     databaseUrl,
+    databaseConnectionSource: database.source,
     databaseSsl: process.env.DATABASE_SSL === "true" || Boolean(databaseUrl?.includes("sslmode=require")),
     databaseConnectTimeoutMs: numberFromEnv("DATABASE_CONNECT_TIMEOUT_MS", 3000),
     databaseInitMaxAttempts,
