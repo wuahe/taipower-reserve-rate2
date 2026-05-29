@@ -52,4 +52,5 @@ test("parseReservePayload parses official d006020 JSON", () => {
   assert.equal(parsed?.observedAt.toISOString(), "2026-05-29T08:10:00.000Z");
   assert.equal(parsed?.reserveRate, 14.71);
   assert.equal(parsed?.reserveMw, 5810);
+  assert.deepEqual((parsed?.raw as { candidate: Record<string, unknown> }).candidate.curr_load, "3765.8");
 });

@@ -75,7 +75,8 @@ export function parseReservePayload(text: string, sourceUrl = "inline", now = ne
 }
 
 function parseFromJson(json: unknown, sourceUrl: string, now: Date): ParsedReserve | null {
-  const candidates = collectJsonCandidates(json, now);
+  const normalized = mergeOfficialRecords(json);
+  const candidates = collectJsonCandidates(normalized ?? json, now);
   candidates.sort((a, b) => b.score - a.score);
   const best = candidates.find((item) => typeof item.reserveRate === "number");
   if (!best || best.reserveRate === null) return null;
@@ -85,6 +86,21 @@ function parseFromJson(json: unknown, sourceUrl: string, now: Date): ParsedReser
     reserveRate: best.reserveRate,
     raw: { sourceUrl, candidate: best.raw }
   };
+}
+
+function mergeOfficialRecords(json: unknown): Record<string, unknown> | null {
+  if (!json || typeof json !== "object") return null;
+  const records = (json as Record<string, unknown>).records;
+  if (!Array.isArray(records)) return null;
+
+  const merged: Record<string, unknown> = {};
+  for (const record of records) {
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      Object.assign(merged, record);
+    }
+  }
+
+  return Object.keys(merged).length > 0 ? merged : null;
 }
 
 function collectJsonCandidates(value: unknown, now: Date): Array<{

@@ -120,7 +120,9 @@ function normalizePoints(points: ReserveReading[]): ChartPoint[] {
     .filter((point): point is ReserveReading & { reserveRate: number } => point.status === "ok" && typeof point.reserveRate === "number")
     .map((point) => {
       const candidate = extractCandidate(point.raw);
-      const loadMw = toNumber(candidate?.fore_peak_dema_load);
+      const currentLoadMw = toNumber(candidate?.curr_load);
+      const peakLoadMw = toNumber(candidate?.fore_peak_dema_load);
+      const loadMw = currentLoadMw ?? peakLoadMw;
       const supplyMw = toNumber(candidate?.fore_maxi_sply_capacity);
       return {
         observedAt: point.observedAt,
