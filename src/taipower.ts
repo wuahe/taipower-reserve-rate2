@@ -96,7 +96,11 @@ function mergeOfficialRecords(json: unknown): Record<string, unknown> | null {
   const merged: Record<string, unknown> = {};
   for (const record of records) {
     if (record && typeof record === "object" && !Array.isArray(record)) {
-      Object.assign(merged, record);
+      for (const [key, value] of Object.entries(record)) {
+        if (!key.startsWith("yday_")) {
+          merged[key] = value;
+        }
+      }
     }
   }
 

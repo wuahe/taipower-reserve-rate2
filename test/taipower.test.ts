@@ -43,8 +43,14 @@ test("parseReservePayload parses official d006020 JSON", () => {
           fore_peak_resv_indicator: "G",
           fore_peak_hour_range: "13:00-16:00",
           publish_time: "115.05.29(五)16:10"
+        },
+        {
+          yday_date: "115.05.28",
+          yday_peak_resv_capacity: "860.3",
+          yday_peak_resv_rate: "20.76"
         }
-      ]
+      ],
+      yesterday: "not used"
     }),
     "fixture",
     new Date("2026-05-29T08:12:00.000Z")
@@ -53,4 +59,5 @@ test("parseReservePayload parses official d006020 JSON", () => {
   assert.equal(parsed?.reserveRate, 14.71);
   assert.equal(parsed?.reserveMw, 5810);
   assert.deepEqual((parsed?.raw as { candidate: Record<string, unknown> }).candidate.curr_load, "3765.8");
+  assert.equal((parsed?.raw as { candidate: Record<string, unknown> }).candidate.yday_peak_resv_rate, undefined);
 });
