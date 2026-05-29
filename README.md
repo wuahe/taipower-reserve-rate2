@@ -7,7 +7,7 @@
 - `/api/latest`：最新成功資料與最近抓取狀態。
 - `/api/today`：台灣時間今天 00:00 到目前的資料點與統計。
 - 前端網頁：折線圖、目前值、最高、最低、平均、最後更新時間、抓取狀態。
-- Zeabur 部署：讀取 `PORT` 與 `DATABASE_URL`，可搭配 Zeabur PostgreSQL。
+- Zeabur 部署：讀取 `PORT`，並自動使用 `DATABASE_URL`、`POSTGRES_URI` 或 `POSTGRES_CONNECTION_STRING`。
 - 本機開發：未設定 `DATABASE_URL` 時，資料會存到 `data/reserve-readings.json`。
 
 ## 本機執行
@@ -35,7 +35,7 @@ npm start
 1. 將此專案推到 GitHub。
 2. 在 Zeabur 建立 Project，加入 Node.js Service。
 3. 在同一個 Project 加入 PostgreSQL Service。
-4. 確認 Node.js Service 有 `DATABASE_URL` 環境變數。
+4. 確認 Node.js Service 有 PostgreSQL 自動注入變數，例如 `POSTGRES_URI` 或 `POSTGRES_CONNECTION_STRING`。
 5. Zeabur 會依照 `package.json` 執行 build 與 start。
 
 建議環境變數：

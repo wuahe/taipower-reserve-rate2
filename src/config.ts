@@ -32,8 +32,16 @@ function listFromEnv(name: string, fallback: string[]): string[] {
   return urls.length > 0 ? urls : fallback;
 }
 
+function firstEnv(...names: string[]): string | null {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 export function loadConfig(): AppConfig {
-  const databaseUrl = process.env.DATABASE_URL?.trim() || null;
+  const databaseUrl = firstEnv("DATABASE_URL", "POSTGRES_URI", "POSTGRES_CONNECTION_STRING");
   return {
     port: numberFromEnv("PORT", 3000),
     collectIntervalMs: numberFromEnv("COLLECT_INTERVAL_MS", 10 * 60 * 1000),
