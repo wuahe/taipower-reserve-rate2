@@ -18,14 +18,10 @@ const databaseEnvNames = [
   "POSTGRES_CONNECTION_STRING"
 ];
 
-test("loadConfig prefers explicit DATABASE_URL", () => {
+test("loadConfig uses DATABASE_URL when Zeabur components are unavailable", () => {
   withDatabaseEnv(
     {
       DATABASE_URL: "postgresql://manual.example/db",
-      POSTGRES_HOST: "postgresql-trotal.zeabur.internal",
-      POSTGRES_USERNAME: "root",
-      POSTGRES_PASSWORD: "secret",
-      POSTGRES_DATABASE: "zeabur",
       POSTGRES_URI: "postgresql://generated.example/db"
     },
     () => {
@@ -36,9 +32,10 @@ test("loadConfig prefers explicit DATABASE_URL", () => {
   );
 });
 
-test("loadConfig builds Zeabur component connection before generated URI", () => {
+test("loadConfig builds Zeabur component connection before DATABASE_URL or generated URI", () => {
   withDatabaseEnv(
     {
+      DATABASE_URL: "postgresql://manual.example/db",
       POSTGRES_HOST: "postgresql-trotal.zeabur.internal",
       POSTGRES_PORT: "5432",
       POSTGRES_USERNAME: "root",

@@ -65,17 +65,12 @@ function buildPostgresUrlFromParts(): { source: string; url: string } | null {
 }
 
 function resolveDatabaseUrl(): { source: string | null; url: string | null } {
-  const explicitUrl = firstNamedEnv("DATABASE_URL");
-  if (explicitUrl) {
-    return { source: explicitUrl.name, url: explicitUrl.value };
-  }
-
   const componentUrl = buildPostgresUrlFromParts();
   if (componentUrl) {
     return componentUrl;
   }
 
-  const generatedUrl = firstNamedEnv("POSTGRES_URI", "POSTGRES_CONNECTION_STRING");
+  const generatedUrl = firstNamedEnv("DATABASE_URL", "POSTGRES_URI", "POSTGRES_CONNECTION_STRING");
   return {
     source: generatedUrl?.name ?? null,
     url: generatedUrl?.value ?? null
