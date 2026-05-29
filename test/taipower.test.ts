@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseReservePayload } from "../src/taipower.js";
+import { normalizeReadingInstantReserve, parseReservePayload } from "../src/taipower.js";
+import type { ReserveReading } from "../src/types.js";
 
 test("parseReservePayload parses HTML text with reserve rate", () => {
   const parsed = parseReservePayload(
@@ -64,4 +65,28 @@ test("parseReservePayload parses official d006020 JSON", () => {
   assert.equal(parsed?.reserveMw, 3048);
   assert.deepEqual((parsed?.raw as { candidate: Record<string, unknown> }).candidate.curr_load, "3765.8");
   assert.equal((parsed?.raw as { candidate: Record<string, unknown> }).candidate.yday_peak_resv_rate, undefined);
+});
+
+test("normalizeReadingInstantReserve recalculates old stored official readings", () => {
+  const reading: ReserveReading = {
+    observedAt: "2026-05-29T08:10:00.000Z",
+    reserveMw: 5810,
+    reserveRate: 14.71,
+    sourceUrl: "fixture",
+    status: "ok",
+    message: null,
+    raw: {
+      sourceUrl: "fixture",
+      candidate: {
+        curr_load: "3765.8",
+        real_hr_maxi_sply_capacity: "4070.6",
+        curr_util_rate: "80"
+      }
+    },
+    createdAt: "2026-05-29T08:11:00.000Z"
+  };
+
+  const normalized = normalizeReadingInstantReserve(reading);
+  assert.equal(normalized?.reserveRate?.toFixed(2), "7.49");
+  assert.equal(normalized?.reserveMw, 3048);
 });

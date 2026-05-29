@@ -74,6 +74,35 @@ export function parseReservePayload(text: string, sourceUrl = "inline", now = ne
   return parseFromText(stripHtml(text), sourceUrl, now);
 }
 
+export function normalizeReadingInstantReserve(reading: ReserveReading | null): ReserveReading | null {
+  if (!reading || reading.status !== "ok") return reading;
+  const candidate = extractOfficialCandidate(reading.raw);
+  if (!candidate) return reading;
+
+  const currentLoad = numberFromUnknown(candidate.curr_load);
+  const currentSupply = numberFromUnknown(candidate.real_hr_maxi_sply_capacity);
+  const currentUtilization = numberFromUnknown(candidate.curr_util_rate);
+  const reserveRate =
+    currentLoad !== null && currentSupply !== null && currentSupply > 0
+      ? ((currentSupply - currentLoad) / currentSupply) * 100
+      : currentUtilization !== null
+        ? 100 - currentUtilization
+        : null;
+
+  if (reserveRate === null) return reading;
+
+  const reserveMw =
+    currentLoad !== null && currentSupply !== null
+      ? roundTo(Math.max(0, (currentSupply - currentLoad) * 10), 3)
+      : reading.reserveMw;
+
+  return {
+    ...reading,
+    reserveMw,
+    reserveRate
+  };
+}
+
 function parseFromJson(json: unknown, sourceUrl: string, now: Date): ParsedReserve | null {
   const normalized = mergeOfficialRecords(json);
   const officialInstant = normalized ? parseOfficialInstantReserve(normalized, sourceUrl, now) : null;
@@ -108,6 +137,13 @@ function mergeOfficialRecords(json: unknown): Record<string, unknown> | null {
   }
 
   return Object.keys(merged).length > 0 ? merged : null;
+}
+
+function extractOfficialCandidate(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const candidate = (raw as Record<string, unknown>).candidate;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  return candidate as Record<string, unknown>;
 }
 
 function parseOfficialInstantReserve(candidate: Record<string, unknown>, sourceUrl: string, now: Date): ParsedReserve | null {

@@ -5,6 +5,7 @@ import path from "node:path";
 import { loadConfig } from "./config.js";
 import { Collector } from "./scheduler.js";
 import { createStore, type ReadingStore } from "./store.js";
+import { normalizeReadingInstantReserve } from "./taipower.js";
 import { taipeiDayRange } from "./time.js";
 import type { LatestResponse, ReserveReading, ReserveSummary, StatusResponse, TodayResponse } from "./types.js";
 
@@ -28,9 +29,11 @@ const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
 
     if (url.pathname === "/api/latest") {
+      const latest = normalizeReadingInstantReserve(await store.latestSuccess());
+      const lastFetch = normalizeReadingInstantReserve(await store.lastFetch());
       const body: LatestResponse = {
-        latest: await store.latestSuccess(),
-        lastFetch: await store.lastFetch(),
+        latest,
+        lastFetch,
         generatedAt: new Date().toISOString()
       };
       sendJson(response, 200, body);
@@ -38,14 +41,20 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (url.pathname === "/api/today") {
-      const day = taipeiDayRange();
-      const points = await store.today();
+      const targetDate = parseDateQuery(url.searchParams.get("date"));
+      if (url.searchParams.has("date") && !targetDate) {
+        sendJson(response, 400, { error: "Invalid date. Use YYYY-MM-DD." });
+        return;
+      }
+
+      const day = taipeiDayRange(targetDate ?? new Date());
+      const points = (await store.today(targetDate ?? new Date())).map((point) => normalizeReadingInstantReserve(point) ?? point);
       const body: TodayResponse = {
         date: day.key,
         timezone: "Asia/Taipei",
         points,
         summary: summarize(points),
-        lastFetch: await store.lastFetch()
+        lastFetch: normalizeReadingInstantReserve(await store.lastFetch())
       };
       sendJson(response, 200, body);
       return;
@@ -139,6 +148,14 @@ function sendJson(response: http.ServerResponse, statusCode: number, body: unkno
     "cache-control": "no-store"
   });
   response.end(JSON.stringify(body));
+}
+
+function parseDateQuery(value: string | null): Date | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return new Date(`${year}-${month}-${day}T12:00:00+08:00`);
 }
 
 async function serveStatic(pathname: string, response: http.ServerResponse): Promise<void> {

@@ -61,6 +61,7 @@ const els = {
   statusPill: document.querySelector<HTMLElement>("#status-pill"),
   status: document.querySelector<HTMLElement>("#fetch-status"),
   empty: document.querySelector<HTMLElement>("#empty-state"),
+  datePicker: document.querySelector<HTMLInputElement>("#date-picker"),
   refresh: document.querySelector<HTMLButtonElement>("#refresh-now")
 };
 
@@ -75,6 +76,10 @@ const chartState: {
 };
 
 els.refresh?.addEventListener("click", () => {
+  void loadAndRender();
+});
+
+els.datePicker?.addEventListener("change", () => {
   void loadAndRender();
 });
 
@@ -96,13 +101,19 @@ els.canvas?.addEventListener("mouseleave", () => {
   drawChart();
 });
 
+if (els.datePicker) els.datePicker.value = taipeiDateKey(new Date());
 void loadAndRender();
-setInterval(() => void loadAndRender(), 60 * 1000);
+setInterval(() => {
+  if (!els.datePicker || els.datePicker.value === taipeiDateKey(new Date())) {
+    void loadAndRender(false);
+  }
+}, 60 * 1000);
 
 async function loadAndRender(showLoading = true): Promise<void> {
   if (showLoading) setStatus("讀取中", "neutral");
   try {
-    const response = await fetch("/api/today", { cache: "no-store" });
+    const selectedDate = els.datePicker?.value || taipeiDateKey(new Date());
+    const response = await fetch(`/api/today?date=${encodeURIComponent(selectedDate)}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = (await response.json()) as TodayResponse;
     const points = normalizePoints(data.points);
@@ -166,16 +177,32 @@ function roundTo(value: number, digits: number): number {
 
 function renderStats(data: TodayResponse, points: ChartPoint[]): void {
   const latest = points.at(-1) ?? null;
+  const summary = summarizePoints(points);
   setText(els.current, latest ? `${latest.reserveRate.toFixed(2)}%` : "--");
-  setText(els.high, formatRate(data.summary.maxRate));
-  setText(els.low, formatRate(data.summary.minRate));
-  setText(els.avg, formatRate(data.summary.avgRate));
-  setText(els.count, `${data.summary.count}`);
+  setText(els.high, formatRate(summary.maxRate));
+  setText(els.low, formatRate(summary.minRate));
+  setText(els.avg, formatRate(summary.avgRate));
+  setText(els.count, `${summary.count}`);
   setText(els.updated, latest ? fullFormatter.format(new Date(latest.observedAt)) : "--");
   setText(els.reserveMw, latest?.reserveMw != null ? `${latest.reserveMw.toLocaleString()} MW` : "--");
   setText(els.loadMw, latest?.loadMw != null ? `${Math.round(latest.loadMw).toLocaleString()} MW` : "--");
   setText(els.supplyMw, latest?.supplyMw != null ? `${Math.round(latest.supplyMw).toLocaleString()} MW` : "--");
   if (els.empty) els.empty.hidden = points.length > 0;
+}
+
+function summarizePoints(points: ChartPoint[]): TodayResponse["summary"] {
+  if (points.length === 0) {
+    return { count: 0, minRate: null, maxRate: null, avgRate: null };
+  }
+
+  const values = points.map((point) => point.reserveRate);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return {
+    count: values.length,
+    minRate: Math.min(...values),
+    maxRate: Math.max(...values),
+    avgRate: total / values.length
+  };
 }
 
 function renderStatus(data: TodayResponse): void {
@@ -191,6 +218,15 @@ function renderStatus(data: TodayResponse): void {
   } else {
     setStatus(`抓取失敗，${fetch.message ?? "原因不明"}，最近嘗試 ${time}`, "error");
   }
+}
+
+function taipeiDateKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
 }
 
 function setStatus(message: string, tone: "ok" | "error" | "neutral"): void {
@@ -427,7 +463,7 @@ function renderTooltip(
   tooltip.hidden = false;
   tooltip.innerHTML = [
     `<div>${timeFormatter.format(new Date(point.observedAt))}</div>`,
-    `<div>備轉容量率：${point.reserveRate.toFixed(2)}%</div>`,
+    `<div>供電餘裕率：${point.reserveRate.toFixed(2)}%</div>`,
     `<div>即時負載：${point.loadMw != null ? Math.round(point.loadMw).toLocaleString() : "--"} MW</div>`,
     `<div>供電能力：${point.supplyMw != null ? Math.round(point.supplyMw).toLocaleString() : "--"} MW</div>`,
     `<div>備轉容量：${point.reserveMw != null ? Math.round(point.reserveMw).toLocaleString() : "--"} MW</div>`

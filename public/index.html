@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>台電備轉容量率</title>
+    <title>台電供電餘裕率</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -11,17 +11,22 @@
       <header class="header">
         <div>
           <p class="eyebrow">Taipower Reserve</p>
-          <h1>台電備轉容量率</h1>
+          <h1>台電供電餘裕率</h1>
         </div>
         <div class="header-actions">
+          <a class="source-link" href="https://www.taipower.com.tw/2289/2363/2367/2368/10262/normalPost" target="_blank" rel="noopener noreferrer">台電今日電力資訊</a>
+          <label class="date-control">
+            <span>日期</span>
+            <input id="date-picker" type="date" />
+          </label>
           <span id="status-pill" class="status-pill">讀取中</span>
           <button id="refresh-now" class="icon-button" type="button" title="立即刷新" aria-label="立即刷新">↻</button>
         </div>
       </header>
 
-      <section class="summary-cards" aria-label="即時指標">
+      <section class="summary-cards" aria-label="日期統計">
         <article class="summary-card primary">
-          <span class="title">最新備轉容量率</span>
+          <span class="title">最新供電餘裕率</span>
           <strong id="current-rate">--</strong>
         </article>
         <article class="summary-card">
@@ -61,10 +66,10 @@
         </article>
       </section>
 
-      <section class="chart-shell" aria-label="整天備轉容量率曲線">
+      <section class="chart-shell" aria-label="整天供電餘裕率曲線">
         <div class="chart-head">
           <div class="legend">
-            <span class="legend-item"><i class="dot blue"></i>備轉容量率</span>
+            <span class="legend-item"><i class="dot blue"></i>供電餘裕率</span>
             <span class="legend-item"><i class="dot green"></i>即時負載</span>
             <span class="legend-item"><i class="dot yellow"></i>供電能力</span>
           </div>

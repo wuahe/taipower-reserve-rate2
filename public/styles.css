@@ -45,6 +45,8 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .eyebrow {
@@ -58,9 +60,54 @@ body {
 
 h1 {
   margin: 0;
-  font-size: clamp(30px, 4vw, 58px);
+  font-size: clamp(28px, 3.3vw, 46px);
   line-height: 1.12;
   letter-spacing: 0.01em;
+}
+
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(89, 172, 255, 0.42);
+  border-radius: 999px;
+  background: rgba(89, 172, 255, 0.1);
+  color: #cfe8ff;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.source-link:hover {
+  border-color: #8fd0ff;
+  background: rgba(89, 172, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.date-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: linear-gradient(160deg, #15283d, #122134);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.date-control input {
+  width: 132px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  color-scheme: dark;
+  font: inherit;
 }
 
 .icon-button {
@@ -86,13 +133,13 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: 40px;
+  padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: linear-gradient(160deg, #15283d, #122134);
   color: var(--muted);
-  font-size: 22px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -129,8 +176,8 @@ h1 {
 
 .summary-card {
   min-width: 0;
-  min-height: 118px;
-  padding: 16px;
+  min-height: 104px;
+  padding: 15px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: linear-gradient(155deg, #16273c, #111f32);
@@ -144,7 +191,7 @@ h1 {
 
 .summary-card .title {
   display: block;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 580;
@@ -154,7 +201,7 @@ h1 {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: clamp(32px, 3.2vw, 46px);
+  font-size: clamp(26px, 2.5vw, 36px);
   line-height: 1.04;
   letter-spacing: 0;
 }
@@ -174,7 +221,7 @@ h1 {
 
 .meta-card {
   min-width: 0;
-  min-height: 84px;
+  min-height: 76px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -183,7 +230,7 @@ h1 {
 
 .meta-card .label {
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 560;
@@ -193,7 +240,7 @@ h1 {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 21px;
+  font-size: 19px;
   line-height: 1.1;
 }
 
@@ -311,7 +358,7 @@ h1 {
   }
 
   h1 {
-    font-size: clamp(30px, 10vw, 44px);
+    font-size: clamp(28px, 9vw, 38px);
   }
 
   .header {
@@ -319,8 +366,13 @@ h1 {
     align-items: flex-start;
   }
 
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .status-pill {
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .summary-cards {
