@@ -364,17 +364,19 @@ h1 {
 }
 
 .chart-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   margin-bottom: 14px;
 }
 
 .legend {
+  grid-column: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 14px;
 }
 
@@ -406,6 +408,8 @@ h1 {
 }
 
 .chart-status {
+  grid-column: 3;
+  justify-self: end;
   color: var(--muted);
   font-size: 14px;
 }
@@ -484,6 +488,17 @@ h1 {
 
   .status-pill {
     font-size: 14px;
+  }
+
+  .chart-head {
+    grid-template-columns: 1fr;
+  }
+
+  .legend,
+  .chart-status {
+    grid-column: 1;
+    justify-self: center;
+    text-align: center;
   }
 
   .summary-cards {
