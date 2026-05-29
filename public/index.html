@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>台電備轉容量率</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Taipower Reserve</p>
+          <h1>台電備轉容量率</h1>
+        </div>
+        <button id="refresh-now" class="icon-button" type="button" title="立即刷新" aria-label="立即刷新">
+          ↻
+        </button>
+      </header>
+
+      <section class="status-row" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="fetch-status">讀取中</span>
+      </section>
+
+      <section class="metrics" aria-label="今日統計">
+        <article class="metric primary">
+          <span class="label">目前</span>
+          <strong id="current-rate">--</strong>
+        </article>
+        <article class="metric">
+          <span class="label">最高</span>
+          <strong id="high-rate">--</strong>
+        </article>
+        <article class="metric">
+          <span class="label">最低</span>
+          <strong id="low-rate">--</strong>
+        </article>
+        <article class="metric">
+          <span class="label">平均</span>
+          <strong id="avg-rate">--</strong>
+        </article>
+        <article class="metric">
+          <span class="label">筆數</span>
+          <strong id="point-count">--</strong>
+        </article>
+        <article class="metric">
+          <span class="label">最後更新</span>
+          <strong id="updated-at">--</strong>
+        </article>
+      </section>
+
+      <section class="chart-panel" aria-label="整天備轉容量率曲線">
+        <canvas id="reserve-chart"></canvas>
+        <div id="empty-state" class="empty-state">等待第一筆成功資料</div>
+      </section>
+    </main>
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>
