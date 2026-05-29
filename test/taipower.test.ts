@@ -48,6 +48,10 @@ test("parseReservePayload parses official d006020 JSON", () => {
           yday_date: "115.05.28",
           yday_peak_resv_capacity: "860.3",
           yday_peak_resv_rate: "20.76"
+        },
+        {
+          real_hr_maxi_sply_capacity: "4070.6",
+          real_hr_peak_time: "2026.05.29 14:42"
         }
       ],
       yesterday: "not used"
@@ -56,8 +60,8 @@ test("parseReservePayload parses official d006020 JSON", () => {
     new Date("2026-05-29T08:12:00.000Z")
   );
   assert.equal(parsed?.observedAt.toISOString(), "2026-05-29T08:10:00.000Z");
-  assert.equal(parsed?.reserveRate, 14.71);
-  assert.equal(parsed?.reserveMw, 5810);
+  assert.equal(parsed?.reserveRate.toFixed(2), "7.49");
+  assert.equal(parsed?.reserveMw, 3048);
   assert.deepEqual((parsed?.raw as { candidate: Record<string, unknown> }).candidate.curr_load, "3765.8");
   assert.equal((parsed?.raw as { candidate: Record<string, unknown> }).candidate.yday_peak_resv_rate, undefined);
 });

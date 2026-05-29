@@ -123,11 +123,21 @@ function normalizePoints(points: ReserveReading[]): ChartPoint[] {
       const currentLoadMw = toNumber(candidate?.curr_load);
       const peakLoadMw = toNumber(candidate?.fore_peak_dema_load);
       const loadMw = currentLoadMw ?? peakLoadMw;
-      const supplyMw = toNumber(candidate?.fore_maxi_sply_capacity);
+      const currentSupplyMw = toNumber(candidate?.real_hr_maxi_sply_capacity);
+      const peakSupplyMw = toNumber(candidate?.fore_maxi_sply_capacity);
+      const supplyMw = currentSupplyMw ?? peakSupplyMw;
+      const instantReserveRate =
+        currentLoadMw !== null && currentSupplyMw !== null && currentSupplyMw > 0
+          ? ((currentSupplyMw - currentLoadMw) / currentSupplyMw) * 100
+          : null;
+      const instantReserveMw =
+        currentLoadMw !== null && currentSupplyMw !== null
+          ? roundTo(Math.max(0, (currentSupplyMw - currentLoadMw) * 10), 3)
+          : null;
       return {
         observedAt: point.observedAt,
-        reserveRate: point.reserveRate,
-        reserveMw: point.reserveMw,
+        reserveRate: instantReserveRate ?? point.reserveRate,
+        reserveMw: instantReserveMw ?? point.reserveMw,
         loadMw: loadMw === null ? null : loadMw * 10,
         supplyMw: supplyMw === null ? null : supplyMw * 10
       };
@@ -147,6 +157,11 @@ function toNumber(value: unknown): number | null {
   if (typeof value !== "string") return null;
   const parsed = Number(value.replace(/,/g, ""));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
 }
 
 function renderStats(data: TodayResponse, points: ChartPoint[]): void {

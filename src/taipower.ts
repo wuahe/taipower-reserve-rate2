@@ -76,6 +76,9 @@ export function parseReservePayload(text: string, sourceUrl = "inline", now = ne
 
 function parseFromJson(json: unknown, sourceUrl: string, now: Date): ParsedReserve | null {
   const normalized = mergeOfficialRecords(json);
+  const officialInstant = normalized ? parseOfficialInstantReserve(normalized, sourceUrl, now) : null;
+  if (officialInstant) return officialInstant;
+
   const candidates = collectJsonCandidates(normalized ?? json, now);
   candidates.sort((a, b) => b.score - a.score);
   const best = candidates.find((item) => typeof item.reserveRate === "number");
@@ -105,6 +108,33 @@ function mergeOfficialRecords(json: unknown): Record<string, unknown> | null {
   }
 
   return Object.keys(merged).length > 0 ? merged : null;
+}
+
+function parseOfficialInstantReserve(candidate: Record<string, unknown>, sourceUrl: string, now: Date): ParsedReserve | null {
+  const currentLoad = numberFromUnknown(candidate.curr_load);
+  const currentSupply = numberFromUnknown(candidate.real_hr_maxi_sply_capacity);
+  const currentUtilization = numberFromUnknown(candidate.curr_util_rate);
+
+  const reserveRate =
+    currentLoad !== null && currentSupply !== null && currentSupply > 0
+      ? ((currentSupply - currentLoad) / currentSupply) * 100
+      : currentUtilization !== null
+        ? 100 - currentUtilization
+        : null;
+
+  if (reserveRate === null) return null;
+
+  const reserveMw =
+    currentLoad !== null && currentSupply !== null
+      ? roundTo(Math.max(0, (currentSupply - currentLoad) * 10), 3)
+      : null;
+
+  return {
+    observedAt: parseTaipeiDateTime(stringifyScalar(candidate.publish_time) ?? "", now) ?? floorToTenMinutes(now),
+    reserveMw,
+    reserveRate,
+    raw: { sourceUrl, candidate }
+  };
 }
 
 function collectJsonCandidates(value: unknown, now: Date): Array<{
@@ -242,6 +272,16 @@ function parseNumeric(value: string): number | null {
   if (!match) return null;
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function numberFromUnknown(value: unknown): number | null {
+  const scalar = stringifyScalar(value);
+  return scalar ? parseNumeric(scalar) : null;
+}
+
+function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
 }
 
 function matchNumber(text: string, pattern: RegExp): number | null {
