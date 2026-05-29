@@ -384,8 +384,8 @@ function drawChart(): void {
   const xMin = times[0];
   const xMax = Math.max(times.at(-1) ?? xMin, xMin + 60_000);
 
-  const rateMin = Math.max(0, Math.floor(Math.min(...points.map((point) => point.reserveRate)) - 2));
-  const rateMax = Math.ceil(Math.max(...points.map((point) => point.reserveRate)) + 2);
+  const rateMin = 0;
+  const rateMax = Math.max(10, Math.ceil(Math.max(...points.map((point) => point.reserveRate)) + 2));
   const mwValues = points
     .flatMap((point) => [point.loadMw, point.supplyMw])
     .filter((value): value is number => typeof value === "number");
