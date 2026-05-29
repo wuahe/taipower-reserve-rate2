@@ -6,6 +6,7 @@
 
 - `/api/latest`：最新成功資料與最近抓取狀態。
 - `/api/today`：台灣時間今天 00:00 到目前的資料點與統計。
+- `/api/status`：服務診斷狀態，顯示目前使用 PostgreSQL 或暫存檔、今日筆數與最近抓取狀態。
 - 前端網頁：折線圖、目前值、最高、最低、平均、最後更新時間、抓取狀態。
 - Zeabur 部署：讀取 `PORT`，並自動使用 `DATABASE_URL`、`POSTGRES_URI` 或 `POSTGRES_CONNECTION_STRING`。
 - 本機開發：未設定 `DATABASE_URL` 時，資料會存到 `data/reserve-readings.json`。

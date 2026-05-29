@@ -5,6 +5,7 @@ import { taipeiDayRange } from "./time.js";
 import type { ReserveReading } from "./types.js";
 
 export interface ReadingStore {
+  readonly kind: "postgres" | "file";
   init(): Promise<void>;
   upsert(reading: ReserveReading): Promise<void>;
   latestSuccess(): Promise<ReserveReading | null>;
@@ -13,6 +14,8 @@ export interface ReadingStore {
 }
 
 export class FileStore implements ReadingStore {
+  readonly kind = "file";
+
   constructor(private readonly filePath: string) {}
 
   async init(): Promise<void> {
@@ -65,6 +68,7 @@ export class FileStore implements ReadingStore {
 }
 
 export class PostgresStore implements ReadingStore {
+  readonly kind = "postgres";
   private readonly pool: Pool;
 
   constructor(databaseUrl: string, ssl: boolean, connectTimeoutMs: number) {

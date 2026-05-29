@@ -6,13 +6,14 @@ import { loadConfig } from "./config.js";
 import { Collector } from "./scheduler.js";
 import { createStore, type ReadingStore } from "./store.js";
 import { taipeiDayRange } from "./time.js";
-import type { LatestResponse, ReserveReading, ReserveSummary, TodayResponse } from "./types.js";
+import type { LatestResponse, ReserveReading, ReserveSummary, StatusResponse, TodayResponse } from "./types.js";
 
 const projectRoot = process.cwd();
 const publicDir = path.join(projectRoot, "public");
 
 const config = loadConfig();
-const store = await createReadyStore();
+const storeState = await createReadyStore();
+const store = storeState.store;
 
 const collector = new Collector(config, store);
 collector.start();
@@ -45,6 +46,44 @@ const server = http.createServer(async (request, response) => {
         points,
         summary: summarize(points),
         lastFetch: await store.lastFetch()
+      };
+      sendJson(response, 200, body);
+      return;
+    }
+
+    if (url.pathname === "/api/status" || url.pathname === "/api/debug") {
+      const day = taipeiDayRange();
+      const points = await store.today();
+      const lastFetch = await store.lastFetch();
+      const body: StatusResponse = {
+        ok: true,
+        generatedAt: new Date().toISOString(),
+        timezone: "Asia/Taipei",
+        storage: {
+          type: store.kind,
+          persistent: store.kind === "postgres",
+          databaseConfigured: Boolean(config.databaseUrl),
+          fallbackReason: storeState.fallbackReason
+        },
+        collection: {
+          intervalMs: config.collectIntervalMs,
+          intervalMinutes: config.collectIntervalMs / 60_000,
+          sourceCount: config.sourceUrls.length
+        },
+        today: {
+          date: day.key,
+          pointCount: points.length,
+          lastObservedAt: points.at(-1)?.observedAt ?? null
+        },
+        lastFetch: lastFetch
+          ? {
+              status: lastFetch.status,
+              observedAt: lastFetch.observedAt,
+              createdAt: lastFetch.createdAt,
+              sourceUrl: lastFetch.sourceUrl,
+              message: lastFetch.message
+            }
+          : null
       };
       sendJson(response, 200, body);
       return;
@@ -134,7 +173,12 @@ function contentType(filePath: string): string {
   return "application/octet-stream";
 }
 
-async function createReadyStore(): Promise<ReadingStore> {
+interface StoreState {
+  store: ReadingStore;
+  fallbackReason: string | null;
+}
+
+async function createReadyStore(): Promise<StoreState> {
   const primary = createStore(
     config.databaseUrl,
     config.dataFile,
@@ -143,14 +187,14 @@ async function createReadyStore(): Promise<ReadingStore> {
   );
   try {
     await initStoreWithRetry(primary);
-    return primary;
+    return { store: primary, fallbackReason: null };
   } catch (error) {
     if (!config.databaseUrl) throw error;
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[store] PostgreSQL unavailable after retries, falling back to file storage: ${message}`);
     const fallback = createStore(null, config.dataFile);
     await fallback.init();
-    return fallback;
+    return { store: fallback, fallbackReason: message };
   }
 }
 
