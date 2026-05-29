@@ -67,9 +67,10 @@ export class FileStore implements ReadingStore {
 export class PostgresStore implements ReadingStore {
   private readonly pool: Pool;
 
-  constructor(databaseUrl: string, ssl: boolean) {
+  constructor(databaseUrl: string, ssl: boolean, connectTimeoutMs: number) {
     this.pool = new Pool({
       connectionString: databaseUrl,
+      connectionTimeoutMillis: connectTimeoutMs,
       ssl: ssl ? { rejectUnauthorized: false } : false
     });
   }
@@ -150,8 +151,15 @@ export class PostgresStore implements ReadingStore {
   }
 }
 
-export function createStore(databaseUrl: string | null, dataFile: string, databaseSsl = false): ReadingStore {
-  return databaseUrl ? new PostgresStore(databaseUrl, databaseSsl) : new FileStore(dataFile);
+export function createStore(
+  databaseUrl: string | null,
+  dataFile: string,
+  databaseSsl = false,
+  databaseConnectTimeoutMs = 3000
+): ReadingStore {
+  return databaseUrl
+    ? new PostgresStore(databaseUrl, databaseSsl, databaseConnectTimeoutMs)
+    : new FileStore(dataFile);
 }
 
 function descObservedAt(a: ReserveReading, b: ReserveReading): number {

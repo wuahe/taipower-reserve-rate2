@@ -3,6 +3,9 @@ export interface AppConfig {
   collectIntervalMs: number;
   databaseUrl: string | null;
   databaseSsl: boolean;
+  databaseConnectTimeoutMs: number;
+  databaseInitMaxAttempts: number;
+  databaseInitRetryDelayMs: number;
   dataFile: string;
   sourceUrls: string[];
   nodeEnv: string;
@@ -42,11 +45,15 @@ function firstEnv(...names: string[]): string | null {
 
 export function loadConfig(): AppConfig {
   const databaseUrl = firstEnv("DATABASE_URL", "POSTGRES_URI", "POSTGRES_CONNECTION_STRING");
+  const databaseInitMaxAttempts = numberFromEnv("DATABASE_INIT_MAX_ATTEMPTS", databaseUrl ? 3 : 1);
   return {
     port: numberFromEnv("PORT", 3000),
     collectIntervalMs: numberFromEnv("COLLECT_INTERVAL_MS", 10 * 60 * 1000),
     databaseUrl,
     databaseSsl: process.env.DATABASE_SSL === "true" || Boolean(databaseUrl?.includes("sslmode=require")),
+    databaseConnectTimeoutMs: numberFromEnv("DATABASE_CONNECT_TIMEOUT_MS", 3000),
+    databaseInitMaxAttempts,
+    databaseInitRetryDelayMs: numberFromEnv("DATABASE_INIT_RETRY_DELAY_MS", 1000),
     dataFile: process.env.DATA_FILE?.trim() || "data/reserve-readings.json",
     sourceUrls: listFromEnv("TAIPOWER_SOURCE_URLS", defaultSourceUrls),
     nodeEnv: process.env.NODE_ENV?.trim() || "development"

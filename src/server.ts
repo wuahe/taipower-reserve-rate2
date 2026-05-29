@@ -135,7 +135,12 @@ function contentType(filePath: string): string {
 }
 
 async function createReadyStore(): Promise<ReadingStore> {
-  const primary = createStore(config.databaseUrl, config.dataFile, config.databaseSsl);
+  const primary = createStore(
+    config.databaseUrl,
+    config.dataFile,
+    config.databaseSsl,
+    config.databaseConnectTimeoutMs
+  );
   try {
     await initStoreWithRetry(primary);
     return primary;
@@ -150,7 +155,7 @@ async function createReadyStore(): Promise<ReadingStore> {
 }
 
 async function initStoreWithRetry(targetStore: ReadingStore): Promise<void> {
-  const maxAttempts = config.databaseUrl ? 30 : 1;
+  const maxAttempts = config.databaseUrl ? config.databaseInitMaxAttempts : 1;
   let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -162,7 +167,7 @@ async function initStoreWithRetry(targetStore: ReadingStore): Promise<void> {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[store] init failed ${attempt}/${maxAttempts}: ${message}`);
       if (attempt < maxAttempts) {
-        await delay(2000);
+        await delay(config.databaseInitRetryDelayMs);
       }
     }
   }
