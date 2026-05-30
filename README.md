@@ -2,7 +2,7 @@
 
 TypeScript 全棧網頁服務，每 10 分鐘抓取台電官方資料，記錄即時供電餘裕率、即時負載、供電能力與備轉容量，並以整天曲線呈現。
 
-![台電供電餘裕率追蹤截圖](docs/screenshot.png)
+<img src="docs/screenshot.png" alt="台電供電餘裕率追蹤截圖" width="100%">
 
 ## 公開網址
 
