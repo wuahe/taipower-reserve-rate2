@@ -475,11 +475,11 @@ function drawChart(): void {
   const panelGap = compact ? 34 : 38;
   const usable = height - padding.top - padding.bottom - panelGap;
 
-  // 上區：即時負載／供電能力（MW）；下區：供電餘裕率（%）
-  const mwTop = padding.top;
-  const mwBottom = mwTop + usable * 0.5;
-  const rateTop = mwBottom + panelGap;
-  const rateBottom = height - padding.bottom;
+  // 上區：供電餘裕率（%）；下區：即時負載／供電能力（MW）
+  const rateTop = padding.top;
+  const rateBottom = rateTop + usable * 0.5;
+  const mwTop = rateBottom + panelGap;
+  const mwBottom = height - padding.bottom;
 
   // X：固定顯示選定日期的 00:00–24:00（台北時間）
   const xMin = Date.parse(`${chartState.selectedDate}T00:00:00+08:00`);
@@ -487,14 +487,14 @@ function drawChart(): void {
   chartState.layout = { left: plotLeft, right: plotRight, xMin, xMax };
   const toX = (iso: string) => plotLeft + ((new Date(iso).getTime() - xMin) / (xMax - xMin)) * plotWidth;
 
-  // 下區刻度：餘裕率取整
+  // 上區刻度：餘裕率取整
   const maxRate = Math.max(...points.map((point) => point.reserveRate));
   const rateStep = maxRate > 60 ? 20 : 10;
   const rateTicks = Math.max(2, Math.ceil((maxRate + 2) / rateStep));
   const rateMax = rateTicks * rateStep;
   const toRateY = (value: number) => rateBottom - (value / rateMax) * (rateBottom - rateTop);
 
-  // 上區刻度：MW 取整
+  // 下區刻度：MW 取整
   const mwValues = points
     .flatMap((point) => [point.loadMw, point.supplyMw])
     .filter((value): value is number => typeof value === "number");
@@ -507,7 +507,7 @@ function drawChart(): void {
   const mwTickCount = Math.round((mwMax - mwMin) / mwStep);
   const toMwY = (value: number) => mwBottom - ((value - mwMin) / (mwMax - mwMin)) * (mwBottom - mwTop);
 
-  // 下區燈號區帶
+  // 上區燈號區帶
   const band10 = toRateY(10);
   const band6 = toRateY(6);
   ctx.fillStyle = "rgba(251, 191, 36, 0.06)";
@@ -549,7 +549,7 @@ function drawChart(): void {
     }
     ctx.fillStyle = COLORS.axis;
     ctx.textAlign = h === 24 && compact ? "right" : "center";
-    ctx.fillText(`${String(h).padStart(2, "0")}:00`, h === 24 && compact ? x + 4 : x, rateBottom + 9);
+    ctx.fillText(`${String(h).padStart(2, "0")}:00`, h === 24 && compact ? x + 4 : x, mwBottom + 9);
   }
 
   // 區塊標題
@@ -572,7 +572,7 @@ function drawChart(): void {
   ctx.textBaseline = "bottom";
   ctx.fillText("10% 黃燈線", plotRight - 6, band10 - 4);
 
-  // 上區曲線
+  // 下區曲線
   ctx.save();
   ctx.beginPath();
   ctx.rect(plotLeft, mwTop - 4, plotWidth, mwBottom - mwTop + 8);
@@ -587,7 +587,7 @@ function drawChart(): void {
   strokeSeries(ctx, loadPts, toX, (point) => toMwY(point.loadMw as number), COLORS.load, 2, 0.95);
   ctx.restore();
 
-  // 下區曲線
+  // 上區曲線
   ctx.save();
   ctx.beginPath();
   ctx.rect(plotLeft, rateTop - 4, plotWidth, rateBottom - rateTop + 4);
@@ -612,7 +612,7 @@ function drawChart(): void {
   if (hovering) {
     ctx.strokeStyle = "rgba(220, 226, 247, 0.35)";
     ctx.setLineDash([3, 4]);
-    line(ctx, activeX, mwTop, activeX, rateBottom);
+    line(ctx, activeX, rateTop, activeX, mwBottom);
     ctx.setLineDash([]);
   } else {
     ctx.beginPath();
@@ -625,7 +625,7 @@ function drawChart(): void {
   dot(ctx, activeX, activeY, COLORS.rate, 4.5);
 
   if (hovering) {
-    renderTooltip(active, activeX, (mwBottom + rateTop) / 2, width, mwTop);
+    renderTooltip(active, activeX, (rateBottom + mwTop) / 2, width, rateTop);
   } else if (els.tooltip) {
     els.tooltip.hidden = true;
   }
