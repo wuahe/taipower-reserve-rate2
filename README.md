@@ -6,7 +6,7 @@ TypeScript 全棧網頁服務，每 10 分鐘抓取台電官方資料，記錄�
 
 ## 公開網址
 
-[https://taipowercodex.zeabur.app/](https://taipowercodex.zeabur.app/)
+[https://taipower.albowu.com/](https://taipower.albowu.com/)
 
 ## 功能
 

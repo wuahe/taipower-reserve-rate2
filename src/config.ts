@@ -105,6 +105,6 @@ export function loadConfig(): AppConfig {
     notifyTokenHeader: process.env.NOTIFY_TOKEN_HEADER?.trim() || "X-Notify-Token",
     notifyThreshold: numberFromEnv("NOTIFY_THRESHOLD", 10),
     notifySevereThreshold: numberFromEnv("NOTIFY_SEVERE_THRESHOLD", 6),
-    siteUrl: process.env.SITE_URL?.trim() || "https://taipower2.albowu.com"
+    siteUrl: process.env.SITE_URL?.trim() || "https://taipower.albowu.com"
   };
 }
