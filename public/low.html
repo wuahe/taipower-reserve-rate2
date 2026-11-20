@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#080b16" />
+    <title>偏低紀錄 · 台電供電餘裕率</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="dashboard">
+      <header class="header header-compact">
+        <div class="brand">
+          <a class="back-link" href="/">← 回到即時</a>
+          <h1>偏低紀錄</h1>
+        </div>
+        <div class="header-actions">
+          <button id="refresh-now" class="icon-button" type="button" title="重新查詢" aria-label="重新查詢">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="low-shell low-page" aria-labelledby="low-title">
+        <div class="low-head">
+          <div>
+            <h2 id="low-title">供電餘裕率低於門檻的時段</h2>
+            <p class="low-summary" id="low-summary">讀取中</p>
+          </div>
+          <div class="low-controls">
+            <label class="select">
+              <span>低於</span>
+              <select id="low-threshold">
+                <option value="6">6%</option>
+                <option value="10" selected>10%</option>
+                <option value="15">15%</option>
+              </select>
+            </label>
+            <label class="select">
+              <span>期間</span>
+              <select id="low-days">
+                <option value="7">最近 7 天</option>
+                <option value="30" selected>最近 30 天</option>
+                <option value="90">最近 90 天</option>
+                <option value="366">全部</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="low-table" role="table" aria-label="偏低時段">
+          <div class="low-row low-row-head" role="row">
+            <span role="columnheader">日期</span>
+            <span role="columnheader">時段</span>
+            <span role="columnheader">持續</span>
+            <span role="columnheader">最低</span>
+          </div>
+          <div id="low-list"></div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>點任一列可查看那一天的全日曲線</span>
+        <span class="sep" aria-hidden="true">·</span>
+        <span>餘裕率 =（供電能力 − 即時負載）÷ 供電能力</span>
+      </footer>
+    </main>
+    <script type="module" src="/low.js"></script>
+  </body>
+</html>

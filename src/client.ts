@@ -1,3 +1,5 @@
+export {};
+
 interface ReserveReading {
   observedAt: string;
   reserveMw: number | null;
@@ -26,26 +28,6 @@ interface DatesResponse {
   month: string;
   timezone: "Asia/Taipei";
   dates: string[];
-}
-
-interface LowReserveEpisode {
-  date: string;
-  startAt: string;
-  endAt: string;
-  durationMinutes: number;
-  pointCount: number;
-  minRate: number;
-  minAt: string;
-  minReserveMw: number | null;
-}
-
-interface LowReserveResponse {
-  threshold: number;
-  days: number;
-  from: string;
-  to: string;
-  dayCount: number;
-  episodes: LowReserveEpisode[];
 }
 
 interface ChartPoint {
@@ -98,11 +80,7 @@ const els = {
   heroCard: document.querySelector<HTMLElement>("#hero-card"),
   rateLight: document.querySelector<HTMLElement>("#rate-light"),
   rateDelta: document.querySelector<HTMLElement>("#rate-delta"),
-  gaugeMarker: document.querySelector<HTMLElement>("#rate-gauge-marker"),
-  lowSummary: document.querySelector<HTMLElement>("#low-summary"),
-  lowList: document.querySelector<HTMLElement>("#low-list"),
-  lowThreshold: document.querySelector<HTMLSelectElement>("#low-threshold"),
-  lowDays: document.querySelector<HTMLSelectElement>("#low-days")
+  gaugeMarker: document.querySelector<HTMLElement>("#rate-gauge-marker")
 };
 
 interface ChartLayout {
@@ -125,14 +103,13 @@ const chartState: {
   hoverIndex: null,
   layout: null,
   lastFetchStatus: "neutral",
-  selectedDate: taipeiDateKey(new Date()),
-  calendarMonth: taipeiDateKey(new Date()).slice(0, 7),
+  selectedDate: initialDate(),
+  calendarMonth: initialDate().slice(0, 7),
   availableDates: new Set()
 };
 
 els.refresh?.addEventListener("click", () => {
   void loadAndRender();
-  void loadLowEpisodes();
 });
 
 els.dateButton?.addEventListener("click", () => {
@@ -196,7 +173,6 @@ async function loadAndRender(showLoading = true): Promise<void> {
     renderStats(data, points);
     renderStatus(data);
     drawChart();
-    markActiveLowRows();
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), "error");
   }
@@ -275,6 +251,22 @@ function updateDateButton(): void {
   if (els.dateButton) {
     els.dateButton.textContent = chartState.selectedDate.replaceAll("-", "/");
   }
+  syncDateToUrl();
+}
+
+/** 網址帶 ?date=YYYY-MM-DD 時直接顯示那一天（偏低紀錄頁會連過來） */
+function initialDate(): string {
+  const today = taipeiDateKey(new Date());
+  const param = new URLSearchParams(location.search).get("date");
+  return param && /^\d{4}-\d{2}-\d{2}$/.test(param) && param <= today ? param : today;
+}
+
+/** 選的日期寫回網址，方便分享；今天就用乾淨的網址 */
+function syncDateToUrl(): void {
+  const url = new URL(location.href);
+  if (chartState.selectedDate === taipeiDateKey(new Date())) url.searchParams.delete("date");
+  else url.searchParams.set("date", chartState.selectedDate);
+  if (url.href !== location.href) history.replaceState(null, "", url);
 }
 
 function shiftMonth(monthKey: string, offset: number): string {
@@ -819,183 +811,3 @@ function setText(element: HTMLElement | null, value: string): void {
   if (element) element.textContent = value;
 }
 
-// ── 餘裕率偏低紀錄 ─────────────────────────
-
-const LOW_PAGE_SIZE = 12;
-const weekdayFormatter = new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", weekday: "short" });
-const lowState: { episodes: LowReserveEpisode[]; expanded: boolean; requestId: number } = {
-  episodes: [],
-  expanded: false,
-  requestId: 0
-};
-
-els.lowThreshold?.addEventListener("change", () => void loadLowEpisodes());
-els.lowDays?.addEventListener("change", () => void loadLowEpisodes());
-// 放在 lowState 宣告之後才呼叫，避免初始化順序問題
-void loadLowEpisodes();
-
-async function loadLowEpisodes(): Promise<void> {
-  if (!els.lowList || !els.lowSummary) return;
-  const threshold = els.lowThreshold?.value ?? "10";
-  const days = els.lowDays?.value ?? "30";
-  const requestId = ++lowState.requestId;
-  els.lowSummary.textContent = "讀取中";
-
-  try {
-    const response = await fetch(`/api/low?threshold=${encodeURIComponent(threshold)}&days=${encodeURIComponent(days)}`, {
-      cache: "no-store"
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = (await response.json()) as LowReserveResponse;
-    if (requestId !== lowState.requestId) return;
-    lowState.episodes = data.episodes;
-    lowState.expanded = false;
-    renderLowSummary(data);
-    renderLowList();
-  } catch (error) {
-    if (requestId !== lowState.requestId) return;
-    els.lowSummary.textContent = `讀取失敗：${error instanceof Error ? error.message : String(error)}`;
-    els.lowList.replaceChildren();
-  }
-}
-
-function renderLowSummary(data: LowReserveResponse): void {
-  const summary = els.lowSummary;
-  if (!summary) return;
-  const period = data.days >= 366 ? "所有資料" : `最近 ${data.days} 天`;
-  summary.replaceChildren();
-
-  if (data.episodes.length === 0) {
-    summary.textContent = `${period}沒有低於 ${data.threshold}% 的時段`;
-    return;
-  }
-
-  const lowest = data.episodes.reduce((min, episode) => (episode.minRate < min.minRate ? episode : min));
-  summary.append(
-    `${period}有 `,
-    strong(`${data.dayCount}`),
-    " 天、",
-    strong(`${data.episodes.length}`),
-    ` 段低於 ${data.threshold}%，最低 `,
-    strong(`${lowest.minRate.toFixed(2)}%`),
-    `（${shortDate(lowest.date)} ${timeFormatter.format(new Date(lowest.minAt))}）`
-  );
-}
-
-function renderLowList(): void {
-  const list = els.lowList;
-  if (!list) return;
-  list.replaceChildren();
-
-  if (lowState.episodes.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "low-empty";
-    empty.textContent = "這段期間都在門檻以上";
-    list.append(empty);
-    return;
-  }
-
-  const visible = lowState.expanded ? lowState.episodes : lowState.episodes.slice(0, LOW_PAGE_SIZE);
-  for (const episode of visible) {
-    list.append(lowRow(episode));
-  }
-
-  const hidden = lowState.episodes.length - visible.length;
-  if (hidden > 0) {
-    const more = document.createElement("button");
-    more.type = "button";
-    more.className = "low-more";
-    more.textContent = `顯示其餘 ${hidden} 段`;
-    more.addEventListener("click", () => {
-      lowState.expanded = true;
-      renderLowList();
-    });
-    list.append(more);
-  }
-}
-
-function lowRow(episode: LowReserveEpisode): HTMLButtonElement {
-  const row = document.createElement("button");
-  row.type = "button";
-  row.className = "low-row";
-  row.setAttribute("role", "row");
-  row.title = "在上方圖表查看這一天";
-  row.dataset.date = episode.date;
-  if (episode.date === chartState.selectedDate) row.dataset.active = "true";
-
-  const date = cell("c-date");
-  const dateNum = document.createElement("span");
-  dateNum.className = "num";
-  dateNum.textContent = shortDate(episode.date);
-  const weekday = document.createElement("span");
-  weekday.className = "weekday";
-  weekday.textContent = weekdayFormatter.format(new Date(`${episode.date}T12:00:00+08:00`));
-  date.append(dateNum, weekday);
-
-  const start = timeFormatter.format(new Date(episode.startAt));
-  const end = timeFormatter.format(new Date(new Date(episode.endAt).getTime() + 10 * 60_000));
-  const time = cell("c-time num");
-  time.textContent = episode.pointCount === 1 ? start : `${start}–${end}`;
-
-  const duration = cell("c-dur");
-  duration.textContent = formatDuration(episode.durationMinutes);
-
-  const min = cell("c-min");
-  const minWrap = document.createElement("span");
-  minWrap.className = "min";
-  minWrap.dataset.tone = lightFor(episode.minRate).tone;
-  const minValue = document.createElement("b");
-  minValue.textContent = `${episode.minRate.toFixed(2)}%`;
-  const minTime = document.createElement("small");
-  minTime.textContent = timeFormatter.format(new Date(episode.minAt));
-  minWrap.append(minValue, minTime);
-  min.append(minWrap);
-
-  row.append(date, time, duration, min);
-  row.addEventListener("click", () => showDate(episode.date));
-  return row;
-}
-
-function showDate(date: string): void {
-  chartState.selectedDate = date;
-  chartState.calendarMonth = date.slice(0, 7);
-  chartState.hoverIndex = null;
-  updateDateButton();
-  void loadAndRender();
-  void renderCalendar();
-  markActiveLowRows();
-  document.querySelector(".chart-shell")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-/** 只切換「目前查看的日期」標示，不重畫整個清單（重畫會打斷平滑捲動） */
-function markActiveLowRows(): void {
-  els.lowList?.querySelectorAll<HTMLElement>(".low-row").forEach((row) => {
-    if (row.dataset.date === chartState.selectedDate) row.dataset.active = "true";
-    else delete row.dataset.active;
-  });
-}
-
-function cell(className: string): HTMLSpanElement {
-  const span = document.createElement("span");
-  span.className = className;
-  span.setAttribute("role", "cell");
-  return span;
-}
-
-function strong(text: string): HTMLElement {
-  const element = document.createElement("strong");
-  element.textContent = text;
-  return element;
-}
-
-function shortDate(date: string): string {
-  const [, month, day] = date.split("-");
-  return `${month}/${day}`;
-}
-
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} 分鐘`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `${hours} 小時` : `${hours} 小時 ${rest} 分`;
-}
