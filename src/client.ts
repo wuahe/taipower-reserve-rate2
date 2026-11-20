@@ -74,12 +74,24 @@ const els = {
   calendarPrev: document.querySelector<HTMLButtonElement>("#calendar-prev"),
   calendarNext: document.querySelector<HTMLButtonElement>("#calendar-next"),
   calendarGrid: document.querySelector<HTMLElement>("#calendar-grid"),
-  refresh: document.querySelector<HTMLButtonElement>("#refresh-now")
+  refresh: document.querySelector<HTMLButtonElement>("#refresh-now"),
+  heroCard: document.querySelector<HTMLElement>("#hero-card"),
+  rateLight: document.querySelector<HTMLElement>("#rate-light"),
+  rateDelta: document.querySelector<HTMLElement>("#rate-delta"),
+  gaugeMarker: document.querySelector<HTMLElement>("#rate-gauge-marker")
 };
+
+interface ChartLayout {
+  left: number;
+  right: number;
+  xMin: number;
+  xMax: number;
+}
 
 const chartState: {
   points: ChartPoint[];
   hoverIndex: number | null;
+  layout: ChartLayout | null;
   lastFetchStatus: "ok" | "error" | "neutral";
   selectedDate: string;
   calendarMonth: string;
@@ -87,6 +99,7 @@ const chartState: {
 } = {
   points: [],
   hoverIndex: null,
+  layout: null,
   lastFetchStatus: "neutral",
   selectedDate: taipeiDateKey(new Date()),
   calendarMonth: taipeiDateKey(new Date()).slice(0, 7),
@@ -121,15 +134,17 @@ window.addEventListener("resize", () => {
   drawChart();
 });
 
-els.canvas?.addEventListener("mousemove", (event) => {
-  if (!els.canvas || chartState.points.length === 0) return;
+els.canvas?.addEventListener("pointermove", (event) => {
+  if (!els.canvas || chartState.points.length === 0 || !chartState.layout) return;
   const rect = els.canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
-  chartState.hoverIndex = nearestIndexByX(x, rect.width, chartState.points.length);
+  const index = nearestIndexByTime(x, chartState.layout, chartState.points);
+  if (index === chartState.hoverIndex) return;
+  chartState.hoverIndex = index;
   drawChart();
 });
 
-els.canvas?.addEventListener("mouseleave", () => {
+els.canvas?.addEventListener("pointerleave", () => {
   chartState.hoverIndex = null;
   if (els.tooltip) els.tooltip.hidden = true;
   drawChart();
@@ -300,10 +315,62 @@ function renderStats(data: TodayResponse, points: ChartPoint[]): void {
   setText(els.avg, formatRate(summary.avgRate));
   setText(els.count, `${summary.count}`);
   setText(els.updated, latest ? fullFormatter.format(new Date(latest.observedAt)) : "--");
-  setText(els.reserveMw, latest?.reserveMw != null ? `${latest.reserveMw.toLocaleString()} MW` : "--");
-  setText(els.loadMw, latest?.loadMw != null ? `${Math.round(latest.loadMw).toLocaleString()} MW` : "--");
-  setText(els.supplyMw, latest?.supplyMw != null ? `${Math.round(latest.supplyMw).toLocaleString()} MW` : "--");
+  setMw(els.reserveMw, latest?.reserveMw ?? null);
+  setMw(els.loadMw, latest?.loadMw ?? null);
+  setMw(els.supplyMw, latest?.supplyMw ?? null);
+  renderLight(latest, points.at(-2) ?? null);
   if (els.empty) els.empty.hidden = points.length > 0;
+}
+
+const GAUGE_MAX = 40;
+
+function lightFor(rate: number): { tone: "green" | "yellow" | "orange"; text: string } {
+  if (rate >= 10) return { tone: "green", text: "供電充裕" };
+  if (rate >= 6) return { tone: "yellow", text: "供電吃緊" };
+  return { tone: "orange", text: "供電警戒" };
+}
+
+function renderLight(latest: ChartPoint | null, previous: ChartPoint | null): void {
+  if (!latest) {
+    if (els.heroCard) els.heroCard.dataset.tone = "neutral";
+    setText(els.rateLight, "--");
+    setText(els.rateDelta, "");
+    if (els.gaugeMarker) els.gaugeMarker.style.left = "0%";
+    return;
+  }
+
+  const light = lightFor(latest.reserveRate);
+  if (els.heroCard) els.heroCard.dataset.tone = light.tone;
+  setText(els.rateLight, light.text);
+
+  if (els.gaugeMarker) {
+    const ratio = Math.max(0, Math.min(1, latest.reserveRate / GAUGE_MAX));
+    els.gaugeMarker.style.left = `${ratio * 100}%`;
+  }
+
+  if (els.rateDelta) {
+    if (previous) {
+      const diff = latest.reserveRate - previous.reserveRate;
+      const dir = Math.abs(diff) < 0.005 ? "flat" : diff > 0 ? "up" : "down";
+      const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "–";
+      els.rateDelta.textContent = `${arrow} ${Math.abs(diff).toFixed(2)} 較前一筆`;
+      els.rateDelta.dataset.dir = dir;
+    } else {
+      els.rateDelta.textContent = "";
+    }
+  }
+}
+
+function setMw(element: HTMLElement | null, value: number | null): void {
+  if (!element) return;
+  if (value == null) {
+    element.textContent = "--";
+    return;
+  }
+  element.textContent = Math.round(value).toLocaleString("en-US");
+  const unit = document.createElement("small");
+  unit.textContent = "MW";
+  element.append(unit);
 }
 
 function summarizePoints(points: ChartPoint[]): TodayResponse["summary"] {
@@ -329,10 +396,11 @@ function renderStatus(data: TodayResponse): void {
   }
 
   const time = fullFormatter.format(new Date(fetch.createdAt));
+  const shortTime = timeFormatter.format(new Date(fetch.createdAt));
   if (fetch.status === "ok") {
-    setStatus(`正常，最近抓取 ${time}`, "ok");
+    setStatus(`正常，最近抓取 ${time}`, "ok", `資料正常 · ${shortTime}`);
   } else {
-    setStatus(`抓取失敗，${fetch.message ?? "原因不明"}，最近嘗試 ${time}`, "error");
+    setStatus(`抓取失敗，${fetch.message ?? "原因不明"}，最近嘗試 ${time}`, "error", `抓取失敗 · ${shortTime}`);
   }
 }
 
@@ -345,16 +413,34 @@ function taipeiDateKey(date: Date): string {
   }).format(date);
 }
 
-function setStatus(message: string, tone: "ok" | "error" | "neutral"): void {
+function setStatus(message: string, tone: "ok" | "error" | "neutral", short = message): void {
   chartState.lastFetchStatus = tone;
   if (els.statusPill) {
-    els.statusPill.textContent = message;
+    els.statusPill.textContent = short;
+    els.statusPill.title = message;
     els.statusPill.dataset.tone = tone;
   }
   if (els.status) {
     els.status.textContent = message;
   }
 }
+
+const COLORS = {
+  rate: "#3ed1f0",
+  load: "#ff8a65",
+  supply: "#a7a3ff",
+  reserve: "#94a3c4",
+  warn: "#fbbf24",
+  grid: "rgba(148, 163, 214, 0.11)",
+  axis: "#8088a6",
+  font: "-apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC', sans-serif",
+  mono: "'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, monospace"
+};
+
+const HOUR = 3_600_000;
+const GAP_BREAK_MS = 25 * 60_000;
+
+type Padding = { top: number; right: number; bottom: number; left: number };
 
 function drawChart(): void {
   const canvas = els.canvas;
@@ -363,7 +449,7 @@ function drawChart(): void {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.max(320, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(350, Math.floor(rect.height * dpr));
+  canvas.height = Math.max(260, Math.floor(rect.height * dpr));
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
@@ -373,229 +459,330 @@ function drawChart(): void {
   ctx.clearRect(0, 0, width, height);
 
   const points = chartState.points;
-  drawPanelBackground(ctx, width, height);
-  if (points.length === 0) return;
+  if (points.length === 0) {
+    chartState.layout = null;
+    if (els.tooltip) els.tooltip.hidden = true;
+    return;
+  }
 
-  const padding = { top: 36, right: 84, bottom: 44, left: 58 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
+  const compact = width < 560;
+  const padding: Padding = compact
+    ? { top: 24, right: 12, bottom: 30, left: 44 }
+    : { top: 26, right: 16, bottom: 32, left: 56 };
+  const plotLeft = padding.left;
+  const plotRight = width - padding.right;
+  const plotWidth = plotRight - plotLeft;
+  const panelGap = compact ? 34 : 38;
+  const usable = height - padding.top - padding.bottom - panelGap;
 
-  const times = points.map((point) => new Date(point.observedAt).getTime());
-  const xMin = times[0];
-  const xMax = Math.max(times.at(-1) ?? xMin, xMin + 60_000);
+  // 上區：即時負載／供電能力（MW）；下區：供電餘裕率（%）
+  const mwTop = padding.top;
+  const mwBottom = mwTop + usable * 0.5;
+  const rateTop = mwBottom + panelGap;
+  const rateBottom = height - padding.bottom;
 
-  const rateMin = 0;
-  const rateMax = Math.max(10, Math.ceil(Math.max(...points.map((point) => point.reserveRate)) + 2));
+  // X：固定顯示選定日期的 00:00–24:00（台北時間）
+  const xMin = Date.parse(`${chartState.selectedDate}T00:00:00+08:00`);
+  const xMax = xMin + 24 * HOUR;
+  chartState.layout = { left: plotLeft, right: plotRight, xMin, xMax };
+  const toX = (iso: string) => plotLeft + ((new Date(iso).getTime() - xMin) / (xMax - xMin)) * plotWidth;
+
+  // 下區刻度：餘裕率取整
+  const maxRate = Math.max(...points.map((point) => point.reserveRate));
+  const rateStep = maxRate > 60 ? 20 : 10;
+  const rateTicks = Math.max(2, Math.ceil((maxRate + 2) / rateStep));
+  const rateMax = rateTicks * rateStep;
+  const toRateY = (value: number) => rateBottom - (value / rateMax) * (rateBottom - rateTop);
+
+  // 上區刻度：MW 取整
   const mwValues = points
     .flatMap((point) => [point.loadMw, point.supplyMw])
     .filter((value): value is number => typeof value === "number");
-  const mwMin = mwValues.length === 0 ? 0 : Math.floor(Math.min(...mwValues) * 0.9);
-  const mwMax = mwValues.length === 0 ? 100 : Math.ceil(Math.max(...mwValues) * 1.1);
+  const mwLow = mwValues.length ? Math.min(...mwValues) : 0;
+  const mwHigh = mwValues.length ? Math.max(...mwValues) : 1;
+  const mwTicks = 4;
+  const mwStep = niceStep((mwHigh * 1.03 - mwLow * 0.95) / mwTicks);
+  const mwMin = Math.max(0, Math.floor((mwLow * 0.97) / mwStep) * mwStep);
+  const mwMax = Math.max(mwMin + mwStep * mwTicks, Math.ceil((mwHigh * 1.02) / mwStep) * mwStep);
+  const mwTickCount = Math.round((mwMax - mwMin) / mwStep);
+  const toMwY = (value: number) => mwBottom - ((value - mwMin) / (mwMax - mwMin)) * (mwBottom - mwTop);
 
-  const toX = (iso: string) => padding.left + ((new Date(iso).getTime() - xMin) / (xMax - xMin)) * plotWidth;
-  const toRateY = (value: number) => padding.top + (1 - (value - rateMin) / Math.max(1, rateMax - rateMin)) * plotHeight;
-  const toMwY = (value: number) => padding.top + (1 - (value - mwMin) / Math.max(1, mwMax - mwMin)) * plotHeight;
+  // 下區燈號區帶
+  const band10 = toRateY(10);
+  const band6 = toRateY(6);
+  ctx.fillStyle = "rgba(251, 191, 36, 0.06)";
+  ctx.fillRect(plotLeft, band10, plotWidth, band6 - band10);
+  ctx.fillStyle = "rgba(251, 124, 74, 0.08)";
+  ctx.fillRect(plotLeft, band6, plotWidth, rateBottom - band6);
 
-  drawAxes(ctx, width, height, padding, rateMin, rateMax, mwMin, mwMax);
-  drawThresholdLine(ctx, padding, plotWidth, toRateY(10), "10% 黃燈線");
-
-  drawSeries(
-    ctx,
-    points,
-    toX,
-    (point) => toRateY(point.reserveRate),
-    "rgba(89, 172, 255, 0.23)",
-    "#59acff",
-    true
-  );
-
-  drawSeries(
-    ctx,
-    points.filter((point) => point.loadMw != null),
-    toX,
-    (point) => toMwY(point.loadMw as number),
-    null,
-    "#4ce38d"
-  );
-
-  drawSeries(
-    ctx,
-    points.filter((point) => point.supplyMw != null),
-    toX,
-    (point) => toMwY(point.supplyMw as number),
-    null,
-    "#f3dd61"
-  );
-
-  const activeIndex = chartState.hoverIndex ?? points.length - 1;
-  const activePoint = points[activeIndex];
-  const activeX = toX(activePoint.observedAt);
-  const activeY = toRateY(activePoint.reserveRate);
-
-  ctx.strokeStyle = "rgba(201, 223, 247, 0.45)";
+  // 水平格線與刻度
+  ctx.font = `11px ${COLORS.mono}`;
   ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(activeX, padding.top);
-  ctx.lineTo(activeX, height - padding.bottom);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.beginPath();
-  ctx.arc(activeX, activeY, 4.5, 0, Math.PI * 2);
-  ctx.fillStyle = "#ff9842";
-  ctx.fill();
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
-
-  ctx.fillStyle = "#9fb4cf";
-  ctx.font = "13px 'SF Pro Display', 'Noto Sans TC', sans-serif";
-  ctx.fillText(timeFormatter.format(new Date(points[0].observedAt)), padding.left, height - 14);
-  ctx.fillText(timeFormatter.format(new Date(points.at(-1)!.observedAt)), width - padding.right - 42, height - 14);
-
-  renderTooltip(activePoint, activeX, activeY, width, height, padding);
-}
-
-function drawPanelBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-  const gradient = ctx.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, "rgba(23, 43, 66, 0.95)");
-  gradient.addColorStop(1, "rgba(15, 31, 50, 0.95)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-}
-
-function drawAxes(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  padding: { top: number; right: number; bottom: number; left: number },
-  rateMin: number,
-  rateMax: number,
-  mwMin: number,
-  mwMax: number
-): void {
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-
-  ctx.strokeStyle = "rgba(114, 145, 177, 0.25)";
-  ctx.fillStyle = "#87a1bc";
-  ctx.font = "12px 'SF Pro Display', 'Noto Sans TC', sans-serif";
-  ctx.lineWidth = 1;
-
-  for (let i = 0; i <= 6; i += 1) {
-    const ratio = i / 6;
-    const y = padding.top + plotHeight * ratio;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(width - padding.right, y);
-    ctx.stroke();
-
-    const rateValue = rateMax - (rateMax - rateMin) * ratio;
-    ctx.fillText(`${Math.round(rateValue)}%`, 8, y + 4);
-
-    const mwValue = mwMax - (mwMax - mwMin) * ratio;
-    ctx.fillText(Math.round(mwValue).toLocaleString(), width - padding.right + 10, y + 4);
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= mwTickCount; i += 1) {
+    const value = mwMin + mwStep * i;
+    const y = toMwY(value);
+    ctx.strokeStyle = i === 0 ? "rgba(148, 163, 214, 0.28)" : COLORS.grid;
+    line(ctx, plotLeft, y, plotRight, y);
+    ctx.fillStyle = COLORS.axis;
+    ctx.fillText(formatMwTick(value), plotLeft - 8, y);
+  }
+  for (let i = 0; i <= rateTicks; i += 1) {
+    const y = toRateY(i * rateStep);
+    ctx.strokeStyle = i === 0 ? "rgba(148, 163, 214, 0.32)" : COLORS.grid;
+    line(ctx, plotLeft, y, plotRight, y);
+    ctx.fillStyle = COLORS.axis;
+    ctx.fillText(`${i * rateStep}%`, plotLeft - 8, y);
   }
 
-  ctx.strokeStyle = "rgba(170, 197, 222, 0.35)";
-  ctx.beginPath();
-  ctx.moveTo(padding.left, padding.top);
-  ctx.lineTo(padding.left, height - padding.bottom);
-  ctx.lineTo(width - padding.right, height - padding.bottom);
-  ctx.stroke();
+  // 垂直時間格線（兩區共用）與底部時間刻度
+  const hourStep = compact ? 6 : 3;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let h = 0; h <= 24; h += hourStep) {
+    const x = plotLeft + (h / 24) * plotWidth;
+    if (h > 0 && h < 24) {
+      ctx.strokeStyle = "rgba(148, 163, 214, 0.07)";
+      line(ctx, x, mwTop, x, mwBottom);
+      line(ctx, x, rateTop, x, rateBottom);
+    }
+    ctx.fillStyle = COLORS.axis;
+    ctx.textAlign = h === 24 && compact ? "right" : "center";
+    ctx.fillText(`${String(h).padStart(2, "0")}:00`, h === 24 && compact ? x + 4 : x, rateBottom + 9);
+  }
 
-  ctx.fillStyle = "#c5d9ef";
-  ctx.font = "600 14px 'SF Pro Display', 'Noto Sans TC', sans-serif";
-  ctx.fillText("餘裕率 ％", padding.left - 6, padding.top - 12);
-  ctx.fillText("MW", width - padding.right + 8, padding.top - 12);
-}
+  // 區塊標題
+  ctx.font = `600 11.5px ${COLORS.font}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "bottom";
+  ctx.fillStyle = COLORS.axis;
+  ctx.fillText("負載／供電能力（MW）", 2, mwTop - 10);
+  ctx.fillStyle = COLORS.rate;
+  ctx.fillText("供電餘裕率（%）", 2, rateTop - 10);
 
-function drawThresholdLine(
-  ctx: CanvasRenderingContext2D,
-  padding: { top: number; right: number; bottom: number; left: number },
-  plotWidth: number,
-  y: number,
-  label: string
-): void {
-  ctx.strokeStyle = "rgba(243, 221, 97, 0.85)";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([5, 5]);
-  ctx.beginPath();
-  ctx.moveTo(padding.left, y);
-  ctx.lineTo(padding.left + plotWidth, y);
-  ctx.stroke();
+  // 10% 黃燈線
+  ctx.strokeStyle = "rgba(251, 191, 36, 0.65)";
+  ctx.setLineDash([4, 5]);
+  line(ctx, plotLeft, band10, plotRight, band10);
   ctx.setLineDash([]);
-  ctx.fillStyle = "#f3dd61";
-  ctx.font = "12px 'SF Pro Display', 'Noto Sans TC', sans-serif";
-  ctx.fillText(label, padding.left + plotWidth - 88, y - 6);
+  ctx.font = `600 11px ${COLORS.font}`;
+  ctx.fillStyle = COLORS.warn;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  ctx.fillText("10% 黃燈線", plotRight - 6, band10 - 4);
+
+  // 上區曲線
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plotLeft, mwTop - 4, plotWidth, mwBottom - mwTop + 8);
+  ctx.clip();
+  const supplyPts = points.filter((point) => point.supplyMw != null);
+  const loadPts = points.filter((point) => point.loadMw != null);
+  const loadFill = ctx.createLinearGradient(0, mwTop, 0, mwBottom);
+  loadFill.addColorStop(0, "rgba(255, 138, 101, 0.16)");
+  loadFill.addColorStop(1, "rgba(255, 138, 101, 0.01)");
+  fillSeries(ctx, loadPts, toX, (point) => toMwY(point.loadMw as number), mwBottom, loadFill);
+  strokeSeries(ctx, supplyPts, toX, (point) => toMwY(point.supplyMw as number), COLORS.supply, 2, 0.95);
+  strokeSeries(ctx, loadPts, toX, (point) => toMwY(point.loadMw as number), COLORS.load, 2, 0.95);
+  ctx.restore();
+
+  // 下區曲線
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plotLeft, rateTop - 4, plotWidth, rateBottom - rateTop + 4);
+  ctx.clip();
+  const fill = ctx.createLinearGradient(0, rateTop, 0, rateBottom);
+  fill.addColorStop(0, "rgba(62, 209, 240, 0.34)");
+  fill.addColorStop(1, "rgba(62, 209, 240, 0.02)");
+  fillSeries(ctx, points, toX, (point) => toRateY(point.reserveRate), rateBottom, fill);
+  ctx.shadowColor = "rgba(62, 209, 240, 0.55)";
+  ctx.shadowBlur = 10;
+  strokeSeries(ctx, points, toX, (point) => toRateY(point.reserveRate), COLORS.rate, 2.6, 1);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // 最新點或滑鼠所在點
+  const hovering = chartState.hoverIndex !== null;
+  const activeIndex = chartState.hoverIndex ?? points.length - 1;
+  const active = points[activeIndex];
+  const activeX = toX(active.observedAt);
+  const activeY = toRateY(active.reserveRate);
+
+  if (hovering) {
+    ctx.strokeStyle = "rgba(220, 226, 247, 0.35)";
+    ctx.setLineDash([3, 4]);
+    line(ctx, activeX, mwTop, activeX, rateBottom);
+    ctx.setLineDash([]);
+  } else {
+    ctx.beginPath();
+    ctx.arc(activeX, activeY, 9, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(62, 209, 240, 0.18)";
+    ctx.fill();
+  }
+  if (active.supplyMw != null) dot(ctx, activeX, toMwY(active.supplyMw), COLORS.supply, 3.5);
+  if (active.loadMw != null) dot(ctx, activeX, toMwY(active.loadMw), COLORS.load, 3.5);
+  dot(ctx, activeX, activeY, COLORS.rate, 4.5);
+
+  if (hovering) {
+    renderTooltip(active, activeX, (mwBottom + rateTop) / 2, width, mwTop);
+  } else if (els.tooltip) {
+    els.tooltip.hidden = true;
+  }
 }
 
-function drawSeries<T extends { observedAt: string }>(
+function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
+
+function dot(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, r: number): void {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#080b16";
+  ctx.stroke();
+}
+
+function niceStep(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 1000;
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const unit = raw / power;
+  const nice = unit <= 1 ? 1 : unit <= 2 ? 2 : unit <= 2.5 ? 2.5 : unit <= 5 ? 5 : 10;
+  return nice * power;
+}
+
+function formatMwTick(value: number): string {
+  return value >= 10_000 ? `${(value / 1000).toLocaleString("en-US", { maximumFractionDigits: 1 })}k` : Math.round(value).toLocaleString("en-US");
+}
+
+/** 把資料切成連續段落，超過 25 分鐘沒資料就斷線，避免把缺口畫成直線 */
+function segments<T extends { observedAt: string }>(points: T[]): T[][] {
+  const result: T[][] = [];
+  let current: T[] = [];
+  let lastTime = -Infinity;
+  for (const point of points) {
+    const time = new Date(point.observedAt).getTime();
+    if (current.length && time - lastTime > GAP_BREAK_MS) {
+      result.push(current);
+      current = [];
+    }
+    current.push(point);
+    lastTime = time;
+  }
+  if (current.length) result.push(current);
+  return result;
+}
+
+/** 以中點二次曲線平滑連線 */
+function tracePath<T extends { observedAt: string }>(
   ctx: CanvasRenderingContext2D,
   points: T[],
   toX: (iso: string) => number,
   toY: (point: T) => number,
-  fill: string | null,
-  stroke: string,
-  thick = false
+  move = true
 ): void {
-  if (points.length === 0) return;
-  ctx.beginPath();
   points.forEach((point, index) => {
     const x = toX(point.observedAt);
     const y = toY(point);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    if (index === 0) {
+      if (move) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      return;
+    }
+    const prev = points[index - 1];
+    const px = toX(prev.observedAt);
+    const py = toY(prev);
+    const mx = (px + x) / 2;
+    const my = (py + y) / 2;
+    ctx.quadraticCurveTo(px, py, mx, my);
+    if (index === points.length - 1) ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = thick ? 3.2 : 2.3;
-  ctx.stroke();
-
-  if (!fill) return;
-  const firstX = toX(points[0].observedAt);
-  const lastX = toX(points.at(-1)!.observedAt);
-  const canvas = ctx.canvas;
-  const height = canvas.height / (window.devicePixelRatio || 1);
-
-  ctx.lineTo(lastX, height - 44);
-  ctx.lineTo(firstX, height - 44);
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
 }
 
-function renderTooltip(
-  point: ChartPoint,
-  x: number,
-  y: number,
+function strokeSeries<T extends { observedAt: string }>(
+  ctx: CanvasRenderingContext2D,
+  points: T[],
+  toX: (iso: string) => number,
+  toY: (point: T) => number,
+  color: string,
   width: number,
-  _height: number,
-  padding: { top: number; right: number; bottom: number; left: number }
+  alpha: number
 ): void {
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const segment of segments(points)) {
+    ctx.beginPath();
+    tracePath(ctx, segment, toX, toY);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function fillSeries<T extends { observedAt: string }>(
+  ctx: CanvasRenderingContext2D,
+  points: T[],
+  toX: (iso: string) => number,
+  toY: (point: T) => number,
+  baseline: number,
+  fill: CanvasGradient
+): void {
+  ctx.fillStyle = fill;
+  for (const segment of segments(points)) {
+    ctx.beginPath();
+    ctx.moveTo(toX(segment[0].observedAt), baseline);
+    tracePath(ctx, segment, toX, toY, false);
+    ctx.lineTo(toX(segment.at(-1)!.observedAt), baseline);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function renderTooltip(point: ChartPoint, x: number, y: number, width: number, plotTop: number): void {
   const tooltip = els.tooltip;
   if (!tooltip) return;
 
-  tooltip.hidden = false;
-  tooltip.innerHTML = [
-    `<div>${timeFormatter.format(new Date(point.observedAt))}</div>`,
-    `<div>供電餘裕率：${point.reserveRate.toFixed(2)}%</div>`,
-    `<div>即時負載：${point.loadMw != null ? Math.round(point.loadMw).toLocaleString() : "--"} MW</div>`,
-    `<div>供電能力：${point.supplyMw != null ? Math.round(point.supplyMw).toLocaleString() : "--"} MW</div>`,
-    `<div>備轉容量：${point.reserveMw != null ? Math.round(point.reserveMw).toLocaleString() : "--"} MW</div>`
-  ].join("");
+  const mw = (value: number | null) => (value != null ? `${Math.round(value).toLocaleString("en-US")} MW` : "--");
+  const rows: Array<[string, string, string]> = [
+    [COLORS.rate, "供電餘裕率", `${point.reserveRate.toFixed(2)}%`],
+    [COLORS.load, "即時負載", mw(point.loadMw)],
+    [COLORS.supply, "供電能力", mw(point.supplyMw)],
+    [COLORS.reserve, "備轉容量", mw(point.reserveMw)]
+  ];
 
-  const tooltipRect = tooltip.getBoundingClientRect();
-  const left = Math.min(width - tooltipRect.width - 8, Math.max(padding.left + 8, x + 12));
-  const top = Math.max(padding.top + 10, y - tooltipRect.height - 14);
-  tooltip.style.left = `${left}px`;
+  tooltip.hidden = false;
+  tooltip.innerHTML =
+    `<div class="tt-time">${timeFormatter.format(new Date(point.observedAt))}</div>` +
+    rows.map(([color, label, value]) => `<div class="tt-row"><i style="background:${color}"></i><span>${label}</span><b>${value}</b></div>`).join("");
+
+  const box = tooltip.getBoundingClientRect();
+  const flip = x + 16 + box.width > width - 8;
+  const left = flip ? x - 16 - box.width : x + 16;
+  const top = Math.max(plotTop, Math.min(y - box.height / 2, tooltip.parentElement!.clientHeight - box.height - 8));
+  tooltip.style.left = `${Math.max(8, left)}px`;
   tooltip.style.top = `${top}px`;
 }
 
-function nearestIndexByX(x: number, width: number, count: number): number {
-  if (count <= 1) return 0;
-  const ratio = Math.max(0, Math.min(1, x / Math.max(width, 1)));
-  return Math.round(ratio * (count - 1));
+function nearestIndexByTime(x: number, layout: ChartLayout, points: ChartPoint[]): number {
+  const ratio = (x - layout.left) / Math.max(1, layout.right - layout.left);
+  const target = layout.xMin + ratio * (layout.xMax - layout.xMin);
+  let best = 0;
+  let bestDiff = Infinity;
+  points.forEach((point, index) => {
+    const diff = Math.abs(new Date(point.observedAt).getTime() - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = index;
+    }
+  });
+  return best;
 }
 
 function formatRate(value: number | null): string {
