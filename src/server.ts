@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { loadConfig } from "./config.js";
@@ -120,7 +121,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    await serveStatic(url.pathname, response);
+    await serveStatic(url.pathname, url.searchParams.has("v"), response);
   } catch (error) {
     sendJson(response, 500, {
       error: error instanceof Error ? error.message : String(error)
@@ -182,7 +183,7 @@ function parseMonthQuery(value: string | null): Date | null {
   return new Date(`${year}-${month}-01T12:00:00+08:00`);
 }
 
-async function serveStatic(pathname: string, response: http.ServerResponse): Promise<void> {
+async function serveStatic(pathname: string, versioned: boolean, response: http.ServerResponse): Promise<void> {
   const safePath = pathname === "/" ? "/index.html" : pathname;
   const decoded = decodeURIComponent(safePath);
   const target = path.normalize(path.join(publicDir, decoded));
@@ -196,15 +197,51 @@ async function serveStatic(pathname: string, response: http.ServerResponse): Pro
   try {
     const file = await stat(target);
     if (!file.isFile()) throw new Error("Not a file");
+
+    if (target.endsWith(".html")) {
+      // 把 CSS／JS 的網址加上內容雜湊，檔案一改網址就變，瀏覽器一定抓新版
+      const html = await withAssetVersions(await readFile(target, "utf8"));
+      response.writeHead(200, { "content-type": contentType(target), "cache-control": "no-store" });
+      response.end(html);
+      return;
+    }
+
     response.writeHead(200, {
       "content-type": contentType(target),
-      "cache-control": target.endsWith("index.html") ? "no-store" : "public, max-age=300"
+      // 帶版本號的網址內容永遠不變，可以長期快取；沒帶的每次都要回伺服器確認
+      "cache-control": versioned ? "public, max-age=31536000, immutable" : "no-cache"
     });
     createReadStream(target).pipe(response);
   } catch {
     response.writeHead(404);
     response.end("Not found");
   }
+}
+
+const VERSIONED_ASSETS = ["/styles.css", "/client.js"];
+const assetHashCache = new Map<string, { mtimeMs: number; hash: string }>();
+
+async function assetHash(publicPath: string): Promise<string | null> {
+  const target = path.join(publicDir, publicPath);
+  try {
+    const { mtimeMs } = await stat(target);
+    const cached = assetHashCache.get(publicPath);
+    if (cached && cached.mtimeMs === mtimeMs) return cached.hash;
+    const hash = createHash("sha256").update(await readFile(target)).digest("hex").slice(0, 10);
+    assetHashCache.set(publicPath, { mtimeMs, hash });
+    return hash;
+  } catch {
+    return null;
+  }
+}
+
+async function withAssetVersions(html: string): Promise<string> {
+  let result = html;
+  for (const asset of VERSIONED_ASSETS) {
+    const hash = await assetHash(asset);
+    if (hash) result = result.replaceAll(`"${asset}"`, `"${asset}?v=${hash}"`);
+  }
+  return result;
 }
 
 function contentType(filePath: string): string {
