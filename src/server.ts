@@ -6,9 +6,10 @@ import path from "node:path";
 import { loadConfig } from "./config.js";
 import { Collector } from "./scheduler.js";
 import { createStore, type ReadingStore } from "./store.js";
+import { findLowEpisodes } from "./lowReserve.js";
 import { normalizeReadingInstantReserve } from "./taipower.js";
 import { taipeiDayRange } from "./time.js";
-import type { DatesResponse, LatestResponse, ReserveReading, ReserveSummary, StatusResponse, TodayResponse } from "./types.js";
+import type { DatesResponse, LatestResponse, LowReserveResponse, ReserveReading, ReserveSummary, StatusResponse, TodayResponse } from "./types.js";
 
 const projectRoot = process.cwd();
 const publicDir = path.join(projectRoot, "public");
@@ -72,6 +73,32 @@ const server = http.createServer(async (request, response) => {
         month: url.searchParams.get("month") ?? "",
         timezone: "Asia/Taipei",
         dates: await store.datesWithData(targetMonth)
+      };
+      sendJson(response, 200, body);
+      return;
+    }
+
+    if (url.pathname === "/api/low") {
+      const threshold = parseNumberQuery(url.searchParams.get("threshold"), 10, 1, 50);
+      const days = parseNumberQuery(url.searchParams.get("days"), 30, 1, 366);
+      if (threshold === null || days === null) {
+        sendJson(response, 400, { error: "Invalid query. threshold: 1–50, days: 1–366." });
+        return;
+      }
+
+      const today = taipeiDayRange();
+      const end = today.end;
+      const start = new Date(today.start.getTime() - (Math.round(days) - 1) * 24 * 60 * 60 * 1000);
+      const readings = (await store.between(start, end)).map((point) => normalizeReadingInstantReserve(point) ?? point);
+      const episodes = findLowEpisodes(readings, threshold);
+      const body: LowReserveResponse = {
+        threshold,
+        days: Math.round(days),
+        from: taipeiDayRange(start).key,
+        to: today.key,
+        timezone: "Asia/Taipei",
+        dayCount: new Set(episodes.map((episode) => episode.date)).size,
+        episodes
       };
       sendJson(response, 200, body);
       return;
@@ -173,6 +200,13 @@ function parseDateQuery(value: string | null): Date | null {
   if (!match) return null;
   const [, year, month, day] = match;
   return new Date(`${year}-${month}-${day}T12:00:00+08:00`);
+}
+
+function parseNumberQuery(value: string | null, fallback: number, min: number, max: number): number | null {
+  if (value === null || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return null;
+  return parsed;
 }
 
 function parseMonthQuery(value: string | null): Date | null {

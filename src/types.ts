@@ -26,6 +26,28 @@ export interface TodayResponse {
   lastFetch: ReserveReading | null;
 }
 
+export interface LowReserveEpisode {
+  /** 台北日期（YYYY-MM-DD），以這段開始的時間為準 */
+  date: string;
+  startAt: string;
+  endAt: string;
+  durationMinutes: number;
+  pointCount: number;
+  minRate: number;
+  minAt: string;
+  minReserveMw: number | null;
+}
+
+export interface LowReserveResponse {
+  threshold: number;
+  days: number;
+  from: string;
+  to: string;
+  timezone: "Asia/Taipei";
+  dayCount: number;
+  episodes: LowReserveEpisode[];
+}
+
 export interface DatesResponse {
   month: string;
   timezone: "Asia/Taipei";

@@ -11,6 +11,7 @@ export interface ReadingStore {
   latestSuccess(): Promise<ReserveReading | null>;
   lastFetch(): Promise<ReserveReading | null>;
   today(date?: Date): Promise<ReserveReading[]>;
+  between(start: Date, end: Date): Promise<ReserveReading[]>;
   datesWithData(month: Date): Promise<string[]>;
 }
 
@@ -54,6 +55,10 @@ export class FileStore implements ReadingStore {
 
   async today(date = new Date()): Promise<ReserveReading[]> {
     const { start, end } = taipeiDayRange(date);
+    return this.between(start, end);
+  }
+
+  async between(start: Date, end: Date): Promise<ReserveReading[]> {
     const readings = await this.readAll();
     return readings.filter((item) => {
       const observedAt = new Date(item.observedAt);
@@ -158,6 +163,10 @@ export class PostgresStore implements ReadingStore {
 
   async today(date = new Date()): Promise<ReserveReading[]> {
     const { start, end } = taipeiDayRange(date);
+    return this.between(start, end);
+  }
+
+  async between(start: Date, end: Date): Promise<ReserveReading[]> {
     const result = await this.pool.query(
       `
         SELECT * FROM reserve_readings

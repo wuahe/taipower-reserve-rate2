@@ -98,6 +98,43 @@
         </div>
       </section>
 
+      <section class="low-shell" aria-labelledby="low-title">
+        <div class="low-head">
+          <div>
+            <h2 id="low-title">餘裕率偏低紀錄</h2>
+            <p class="low-summary" id="low-summary">讀取中</p>
+          </div>
+          <div class="low-controls">
+            <label class="select">
+              <span>低於</span>
+              <select id="low-threshold">
+                <option value="6">6%</option>
+                <option value="10" selected>10%</option>
+                <option value="15">15%</option>
+              </select>
+            </label>
+            <label class="select">
+              <span>期間</span>
+              <select id="low-days">
+                <option value="7">最近 7 天</option>
+                <option value="30" selected>最近 30 天</option>
+                <option value="90">最近 90 天</option>
+                <option value="366">全部</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="low-table" role="table" aria-label="偏低時段">
+          <div class="low-row low-row-head" role="row">
+            <span role="columnheader">日期</span>
+            <span role="columnheader">時段</span>
+            <span role="columnheader">持續</span>
+            <span role="columnheader">最低</span>
+          </div>
+          <div id="low-list"></div>
+        </div>
+      </section>
+
       <footer class="footer">
         <span id="fetch-status">讀取中</span>
         <span class="sep" aria-hidden="true">·</span>
