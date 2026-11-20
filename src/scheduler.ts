@@ -1,3 +1,4 @@
+import type { AlertNotifier } from "./alerts.js";
 import type { AppConfig } from "./config.js";
 import type { ReadingStore } from "./store.js";
 import { fetchTaipowerReserve } from "./taipower.js";
@@ -9,7 +10,8 @@ export class Collector {
 
   constructor(
     private readonly config: AppConfig,
-    private readonly store: ReadingStore
+    private readonly store: ReadingStore,
+    private readonly notifier: AlertNotifier | null = null
   ) {}
 
   start(): void {
@@ -32,6 +34,10 @@ export class Collector {
       await this.store.upsert(reading);
       const label = reading.status === "ok" ? `${reading.reserveRate}%` : reading.message;
       console.log(`[collector] ${reading.status} ${reading.observedAt} ${label ?? ""}`);
+      if (reading.status === "ok" && this.notifier) {
+        // 通知失敗不影響資料收集
+        await this.notifier.check().catch((error) => console.error("[alerts] check failed", error));
+      }
       return reading;
     } finally {
       this.running = false;

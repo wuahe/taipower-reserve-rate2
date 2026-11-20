@@ -12,11 +12,16 @@ export interface ReadingStore {
   lastFetch(): Promise<ReserveReading | null>;
   today(date?: Date): Promise<ReserveReading[]>;
   between(start: Date, end: Date): Promise<ReserveReading[]>;
+  /** 這則通知是否已經發過（key 例：low:2026-11-05T08:00:00.000Z） */
+  hasNotified(key: string): Promise<boolean>;
+  markNotified(key: string): Promise<void>;
   datesWithData(month: Date): Promise<string[]>;
 }
 
 export class FileStore implements ReadingStore {
   readonly kind = "file";
+  /** 檔案模式只用於本機開發，通知紀錄放記憶體即可 */
+  private readonly notified = new Set<string>();
 
   constructor(private readonly filePath: string) {}
 
@@ -66,6 +71,14 @@ export class FileStore implements ReadingStore {
     });
   }
 
+  async hasNotified(key: string): Promise<boolean> {
+    return this.notified.has(key);
+  }
+
+  async markNotified(key: string): Promise<void> {
+    this.notified.add(key);
+  }
+
   async datesWithData(month: Date): Promise<string[]> {
     const { start, end } = taipeiMonthRange(month);
     const readings = await this.readAll();
@@ -113,6 +126,21 @@ export class PostgresStore implements ReadingStore {
       );
     `);
     await this.pool.query("CREATE INDEX IF NOT EXISTS reserve_readings_created_at_idx ON reserve_readings (created_at DESC);");
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS notifications_sent (
+        key text PRIMARY KEY,
+        sent_at timestamptz NOT NULL DEFAULT now()
+      );
+    `);
+  }
+
+  async hasNotified(key: string): Promise<boolean> {
+    const result = await this.pool.query("SELECT 1 FROM notifications_sent WHERE key = $1;", [key]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async markNotified(key: string): Promise<void> {
+    await this.pool.query("INSERT INTO notifications_sent (key) VALUES ($1) ON CONFLICT (key) DO NOTHING;", [key]);
   }
 
   async upsert(reading: ReserveReading): Promise<void> {

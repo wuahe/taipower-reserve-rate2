@@ -10,6 +10,13 @@ export interface AppConfig {
   dataFile: string;
   sourceUrls: string[];
   nodeEnv: string;
+  /** n8n 通知中心的 Webhook 網址；沒設就不發通知 */
+  notifyWebhookUrl: string | null;
+  notifyWebhookToken: string | null;
+  notifyTokenHeader: string;
+  notifyThreshold: number;
+  notifySevereThreshold: number;
+  siteUrl: string;
 }
 
 const defaultSourceUrls = [
@@ -92,6 +99,12 @@ export function loadConfig(): AppConfig {
     databaseInitRetryDelayMs: numberFromEnv("DATABASE_INIT_RETRY_DELAY_MS", 1000),
     dataFile: process.env.DATA_FILE?.trim() || "data/reserve-readings.json",
     sourceUrls: listFromEnv("TAIPOWER_SOURCE_URLS", defaultSourceUrls),
-    nodeEnv: process.env.NODE_ENV?.trim() || "development"
+    nodeEnv: process.env.NODE_ENV?.trim() || "development",
+    notifyWebhookUrl: process.env.NOTIFY_WEBHOOK_URL?.trim() || null,
+    notifyWebhookToken: process.env.NOTIFY_WEBHOOK_TOKEN?.trim() || null,
+    notifyTokenHeader: process.env.NOTIFY_TOKEN_HEADER?.trim() || "X-Notify-Token",
+    notifyThreshold: numberFromEnv("NOTIFY_THRESHOLD", 10),
+    notifySevereThreshold: numberFromEnv("NOTIFY_SEVERE_THRESHOLD", 6),
+    siteUrl: process.env.SITE_URL?.trim() || "https://taipower2.albowu.com"
   };
 }

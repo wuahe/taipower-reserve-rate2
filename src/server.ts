@@ -6,6 +6,7 @@ import path from "node:path";
 import { loadConfig } from "./config.js";
 import { Collector } from "./scheduler.js";
 import { createStore, type ReadingStore } from "./store.js";
+import { AlertNotifier } from "./alerts.js";
 import { findLowEpisodes } from "./lowReserve.js";
 import { normalizeReadingInstantReserve } from "./taipower.js";
 import { taipeiDayRange } from "./time.js";
@@ -18,7 +19,9 @@ const config = loadConfig();
 const storeState = await createReadyStore();
 const store = storeState.store;
 
-const collector = new Collector(config, store);
+const notifier = new AlertNotifier(config, store);
+const collector = new Collector(config, store, notifier.enabled ? notifier : null);
+console.log(`[alerts] ${notifier.enabled ? "enabled" : "disabled (NOTIFY_WEBHOOK_URL not set)"}`);
 collector.start();
 
 const server = http.createServer(async (request, response) => {
