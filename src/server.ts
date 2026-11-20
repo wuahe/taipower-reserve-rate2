@@ -218,7 +218,7 @@ function parseMonthQuery(value: string | null): Date | null {
 }
 
 async function serveStatic(pathname: string, versioned: boolean, response: http.ServerResponse): Promise<void> {
-  const safePath = pathname === "/" ? "/index.html" : pathname;
+  const safePath = pathname === "/" ? "/index.html" : pathname === "/low" ? "/low.html" : pathname;
   const decoded = decodeURIComponent(safePath);
   const target = path.normalize(path.join(publicDir, decoded));
 
@@ -252,7 +252,7 @@ async function serveStatic(pathname: string, versioned: boolean, response: http.
   }
 }
 
-const VERSIONED_ASSETS = ["/styles.css", "/client.js"];
+const VERSIONED_ASSETS = ["/styles.css", "/client.js", "/low.js"];
 const assetHashCache = new Map<string, { mtimeMs: number; hash: string }>();
 
 async function assetHash(publicPath: string): Promise<string | null> {

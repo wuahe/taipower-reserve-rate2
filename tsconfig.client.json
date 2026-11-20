@@ -9,5 +9,5 @@
     "rootDir": "src",
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/client.ts"]
+  "include": ["src/client.ts", "src/low.ts"]
 }

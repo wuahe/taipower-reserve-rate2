@@ -719,19 +719,57 @@ h1 {
   font-weight: 560;
 }
 
-button.low-row {
+a.low-row {
+  text-decoration: none;
   cursor: pointer;
   transition: background 120ms ease;
 }
 
-button.low-row:hover,
-button.low-row:focus-visible {
+a.low-row:hover,
+a.low-row:focus-visible {
   outline: 0;
   background: rgba(62, 209, 240, 0.07);
 }
 
-button.low-row[data-active="true"] {
-  background: rgba(62, 209, 240, 0.12);
+.low-page {
+  margin-top: 0;
+}
+
+/* ── Page navigation ──────────────────── */
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--rate) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--rate) 12%, transparent);
+  color: var(--rate);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.nav-button:hover {
+  border-color: var(--rate);
+  background: color-mix(in srgb, var(--rate) 20%, transparent);
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--rate);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
 }
 
 .low-row .num {
@@ -870,8 +908,18 @@ button.low-row[data-active="true"] {
   }
 
   .status-pill {
-    flex: 1;
-    min-width: 0;
+    order: 5;
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .header.header-compact {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .header.header-compact .header-actions {
+    width: auto;
   }
 
   .metric-list {
